@@ -1,0 +1,44 @@
+name: report_export
+description: 研究导出技能 — 将研究 run 导出为 KnowLever/AutoOffice 消费格式
+category: export
+
+interface:
+  input:
+    - name: run_id
+      type: string
+    - name: format
+      type: string
+      options: ["markdown", "json", "full"]
+
+  output:
+    - name: artifact
+      type: ResearchArtifact
+    - name: export_path
+      type: string
+
+tqsdk_bindings:
+  - packages/experiment/research_run.py  # ResearchArtifact
+  - apps/api/app/routers/research.py     # 导出 API
+
+export_formats:
+  markdown:
+    consumer: KnowLever
+    description: Markdown 格式，包含策略描述、指标、验证结果、迭代历史
+    endpoint: GET /api/v1/research/runs/{id}/artifact/markdown
+    traceable: run_id 嵌入在 frontmatter 中
+
+  json:
+    consumer: AutoOffice
+    description: 结构化 JSON，符合 research_artifact.schema.json
+    endpoint: GET /api/v1/research/runs/{id}/artifact
+    traceable: run_id 为顶层字段
+
+  full:
+    consumer: 内部
+    description: 完整 run 数据（含代码、日志、中间结果）
+    endpoint: GET /api/v1/research/runs/{id}
+
+constraints:
+  - 未通过 validation 的 run 不导出为 "approved" artifact
+  - 导出 JSON 必须通过 research_artifact.schema.json 校验
+  - Markdown 导出不包含策略源代码（防止知识泄露到报告中）

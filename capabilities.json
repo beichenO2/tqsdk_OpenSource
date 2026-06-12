@@ -1,0 +1,155 @@
+{
+  "project": "tqsdk",
+  "version": "3.0",
+  "capabilities": [
+    {
+      "id": "tqsdk.data.futures-collector",
+      "service_name": "tqsdk-data-collector",
+      "description": "国内期货数据采集 — TqSdk 订阅 29 品种 5min+daily K 线，存储为 Parquet",
+      "transport": "process",
+      "entry_point": "data-collector/collector.py",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 0
+    },
+    {
+      "id": "tqsdk.data.crypto-collector",
+      "service_name": "tqsdk-data-collector",
+      "description": "加密市场数据采集 — Binance WebSocket 实时 tick，覆盖 10 币种",
+      "transport": "websocket",
+      "entry_point": "data-collector/binance_ws.py",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 0
+    },
+    {
+      "id": "tqsdk.backtest.engine",
+      "service_name": "tqsdk-api",
+      "description": "事件驱动回测引擎 — 支持 Walk-Forward/Monte Carlo/Optuna 超参搜索，期货与加密双市场",
+      "transport": "http",
+      "endpoint": "/api/v1/backtest",
+      "method": "POST",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 300000
+    },
+    {
+      "id": "tqsdk.ml.train",
+      "service_name": "tqsdk-api",
+      "description": "ML/DL 模型训练 — LightGBM/XGBoost + LSTM/Transformer 特征工程管线",
+      "transport": "http",
+      "endpoint": "/api/v1/ml",
+      "method": "POST",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 600000
+    },
+    {
+      "id": "tqsdk.rl.ppo-train",
+      "service_name": "tqsdk-rl",
+      "description": "RL PPO 训练 — MambaFormer 特征提取 + DSR 奖励 + 课程学习，4 阶段渐进训练",
+      "transport": "process",
+      "entry_point": "trading-platform/packages/rl/",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 0
+    },
+    {
+      "id": "tqsdk.optimizer.eternal",
+      "service_name": "tqsdk-eternal-optimizer",
+      "description": "永续自进化优化器 — 6 变体 (1h/5min/volbar/futures) + LLM 引导进化 + overfit 检测门 + 冠军保存",
+      "transport": "process",
+      "entry_point": "trading-platform/eternal-optimizer/eternal_supervisor.py",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 0
+    },
+    {
+      "id": "tqsdk.trading.paper",
+      "service_name": "tqsdk-api",
+      "description": "模拟交易调度 — paper 模式一键启动，策略信号经 ExecutionService 到 BrokerAdapter",
+      "transport": "http",
+      "endpoint": "/api/v1/paper_trading",
+      "method": "POST",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 10000
+    },
+    {
+      "id": "tqsdk.trading.live",
+      "service_name": "tqsdk-api",
+      "description": "实盘交易调度 — live 模式实盘下单，支持期货 TqSdk 与加密多交易所 (Binance/OKX/Weex)",
+      "transport": "http",
+      "endpoint": "/api/v1/live_trading",
+      "method": "POST",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 10000
+    },
+    {
+      "id": "tqsdk.ws.realtime",
+      "service_name": "tqsdk-api",
+      "description": "WebSocket 实时推送 — 6 种事件 (position/trade/account/strategy/signal/risk)，频道订阅",
+      "transport": "websocket",
+      "endpoint": "/ws",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 0
+    },
+    {
+      "id": "tqsdk.strategy.library",
+      "service_name": "tqsdk-api",
+      "description": "策略库管理 — 50+ 期货策略 + 52 加密策略 + 攻防建模 (Lotka-Volterra) + 庄家识别",
+      "transport": "http",
+      "endpoint": "/api/v1/strategies",
+      "method": "GET",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 10000
+    },
+    {
+      "id": "tqsdk.research.run",
+      "service_name": "tqsdk-api",
+      "description": "自然语言策略研究工作台 — ResearchRun 创建/执行/诊断/验证，产出结构化 artifact",
+      "transport": "http",
+      "endpoint": "/api/v1/research/runs",
+      "method": "POST",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 300000
+    },
+    {
+      "id": "tqsdk.deploy.params",
+      "service_name": "tqsdk-api",
+      "description": "参数部署 — Optuna 最优参数导出至策略，支持部署/回滚/历史追踪",
+      "transport": "http",
+      "endpoint": "/api/v1/deploy",
+      "method": "POST",
+      "idempotent": false,
+      "side_effects": true,
+      "timeout_ms": 30000
+    },
+    {
+      "id": "tqsdk.risk.monitor",
+      "service_name": "tqsdk-api",
+      "description": "风控系统 — 限额引擎 + 实时监控，交易前/交易中双重风控",
+      "transport": "http",
+      "endpoint": "/api/v1/risk",
+      "method": "GET",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 5000
+    },
+    {
+      "id": "tqsdk.health.status",
+      "service_name": "tqsdk-api",
+      "description": "平台健康检查 — API 状态、数据源连通性、优化器运行状态、近期错误计数",
+      "transport": "http",
+      "endpoint": "/api/v1/health",
+      "method": "GET",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 5000
+    }
+  ]
+}

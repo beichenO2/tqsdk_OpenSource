@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "datahub"
+version = "0.1.0"
+description = "Data ingestion, cleaning, and tiered storage for trading platform"
+requires-python = ">=3.11"
+dependencies = [
+    "broker-crypto",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=14.0"]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datahub"]

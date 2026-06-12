@@ -1,0 +1,18 @@
+[project]
+name = "trading-risk"
+version = "0.1.0"
+description = "Risk limits, pre-trade checks, and monitoring"
+requires-python = ">=3.11"
+dependencies = [
+    "trading-core",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"risk" = "."
+
+[tool.setuptools]
+packages = ["risk"]

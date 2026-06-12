@@ -1,0 +1,7 @@
+{
+  "variant": "regime",
+  "round": 2,
+  "score": 0.3985387620774484,
+  "saved_at": "2026-04-29T14:34:19.784252",
+  "recovered_from": "models/regime_adaptive_best.json"
+}

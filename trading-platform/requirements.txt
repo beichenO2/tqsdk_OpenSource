@@ -1,0 +1,42 @@
+# Core
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+pydantic-settings>=2.6
+
+# Database
+sqlalchemy>=2.0
+sqlmodel>=0.0.22
+alembic>=1.14
+asyncpg>=0.30
+duckdb>=1.1
+
+# Data Processing
+polars>=1.18
+pandas>=2.2
+numpy>=2.1
+pyarrow>=18.0
+
+# Trading
+tqsdk==3.9.2
+
+# ML / RL
+gymnasium>=1.0
+torch>=2.5
+xgboost>=2.1
+lightgbm>=4.5
+stable-baselines3>=2.4
+optuna>=4.1
+
+# Scheduling
+ray>=2.40
+
+# Networking
+httpx>=0.28
+websockets>=14.0
+
+# Utilities
+python-dotenv>=1.0
+loguru>=0.7
+tenacity>=9.0
+orjson>=3.10

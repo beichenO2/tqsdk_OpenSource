@@ -1,0 +1,55 @@
+{
+  "name": "optimizer_failure_review_board",
+  "description": "优化器失败审查委员会 — 分析连续被拒原因并建议调整方向",
+  "roles": [
+    {
+      "id": "gate_analyst",
+      "name": "Gate 分析师",
+      "responsibility": "分析被拒 gate 分布、严重程度趋势、dominant gate 模式",
+      "output_schema": {
+        "dominant_gate": "string",
+        "severity_trend": "increasing|stable|decreasing",
+        "gate_distribution": {"gate_name": "count"},
+        "pattern_analysis": "string",
+        "evidence_refs": ["string"]
+      }
+    },
+    {
+      "id": "search_space_reviewer",
+      "name": "搜索空间审查员",
+      "responsibility": "评估当前参数范围是否合理、是否存在死区、adaptive 调整是否有效",
+      "output_schema": {
+        "space_exhaustion": "low|medium|high",
+        "dead_zones": ["string"],
+        "adaptive_effectiveness": "string",
+        "recommended_adjustments": [{"param": "string", "action": "string", "reason": "string"}],
+        "evidence_refs": ["string"]
+      }
+    },
+    {
+      "id": "strategy_architect",
+      "name": "策略架构师",
+      "responsibility": "判断是否需要更换策略模板、调整策略结构、或切换优化器",
+      "output_schema": {
+        "strategy_viable": "boolean",
+        "structural_issues": ["string"],
+        "alternative_approaches": ["string"],
+        "sampler_recommendation": "TPE|CMA-ES|random|grid",
+        "evidence_refs": ["string"]
+      }
+    }
+  ],
+  "dag": {
+    "sequence": ["gate_analyst", "search_space_reviewer", "strategy_architect"],
+    "description": "Gate 分析 → 搜索空间审查（依赖 gate 结论）→ 架构建议（依赖前两步）"
+  },
+  "input": {
+    "source": "stop_conditions + rejection_history",
+    "required_fields": ["consecutive_rejections", "per_gate_consecutive", "rejection_history", "current_search_space"]
+  },
+  "output": {
+    "format": "structured_review_report",
+    "fields": ["should_restart", "restart_conditions", "parameter_changes", "strategy_changes"]
+  },
+  "constraints": ["只产出建议，不自动改优化器参数", "不自动重启优化器"]
+}

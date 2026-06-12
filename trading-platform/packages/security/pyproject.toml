@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trading-security"
+version = "0.1.0"
+description = "Security, credential management, encryption, and log sanitization for trading platform"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=42.0",
+    "fastapi>=0.115",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "keyring>=25.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/security"]

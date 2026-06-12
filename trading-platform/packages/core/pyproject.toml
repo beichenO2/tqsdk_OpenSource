@@ -1,0 +1,29 @@
+[project]
+name = "trading-core"
+version = "0.1.0"
+description = "量化交易平台核心领域模型"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.10.0",
+    "sqlalchemy>=2.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+# `core/` subtree is the `core.*` package; sibling `db/` maps to `core.db.*`.
+[tool.setuptools.package-dir]
+"core" = "core"
+"core.db" = "db"
+
+[tool.setuptools]
+packages = [
+    "core",
+    "core.enums",
+    "core.events",
+    "core.models",
+    "core.schemas",
+    "core.db",
+    "core.db.models",
+]

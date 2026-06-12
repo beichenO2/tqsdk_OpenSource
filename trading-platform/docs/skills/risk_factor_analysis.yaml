@@ -1,0 +1,48 @@
+name: risk_factor_analysis
+description: 因子与风险分析技能 — 分析策略的风险特征和因子暴露
+category: research
+
+interface:
+  input:
+    - name: backtest_results
+      type: dict
+    - name: equity_curve
+      type: list[float]
+    - name: trades
+      type: list[dict]
+
+  output:
+    - name: risk_metrics
+      type: dict
+    - name: factor_exposure
+      type: dict
+    - name: regime_analysis
+      type: dict
+
+tqsdk_bindings:
+  - packages/risk/                    # 风控系统
+  - packages/features/                # 因子工程
+  - packages/ml/                      # 特征工程
+
+risk_checks:
+  - max_drawdown_duration: 最大回撤持续时间
+  - var_95: 95% VaR
+  - cvar_95: 95% CVaR（条件 VaR）
+  - tail_ratio: 尾部比率
+  - calmar_ratio: Calmar 比率
+  - sortino_ratio: Sortino 比率
+  - ulcer_index: Ulcer 指数
+
+factor_dimensions:
+  - momentum: 动量因子暴露
+  - mean_reversion: 均值回归因子暴露
+  - volatility: 波动率因子暴露
+  - volume: 成交量因子暴露
+  - regime: 市场体制敏感度
+
+futures_specific_risks:
+  - 展期风险：近月远月价差异常时的滚动策略
+  - 交割风险：接近交割月的持仓风险
+  - 流动性风险：小品种和夜盘时段的滑点估计
+  - 保证金风险：保证金率上调时的追保风险
+  - 涨跌停风险：封板后无法平仓的极端情况

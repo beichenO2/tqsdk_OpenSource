@@ -1,0 +1,16 @@
+{
+  "strategy": "TFT",
+  "symbol": "BTCUSDT",
+  "leverage": 8,
+  "val_accuracy": 0.4021,
+  "total_return_pct": -75.94,
+  "n_trades": 1039,
+  "win_rate": 39.3,
+  "profit_factor": 1.12,
+  "max_drawdown_pct": 96.1,
+  "sharpe": 0.02,
+  "calmar": 0.79,
+  "avg_win_pct": 9.57,
+  "avg_loss_pct": 5.55,
+  "final_capital": 24.06
+}

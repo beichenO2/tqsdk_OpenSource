@@ -1,0 +1,12 @@
+{
+  "symbol": "BTCUSDT",
+  "timeframe": "1h",
+  "train_bars": 60627,
+  "test_bars": 15157,
+  "total_timesteps": 2000000,
+  "training_time_sec": 7845.5713839530945,
+  "oos_return_pct": -101.64697759945408,
+  "oos_final_equity": -164.69775994540714,
+  "oos_total_reward": -151.97652820638916,
+  "model_path": "~/Polarisor/tqsdk/trading-platform/models/rl_crypto/ppo_crypto_BTCUSDT_1h_20260420"
+}

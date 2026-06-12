@@ -1,0 +1,21 @@
+[project]
+name = "trading-explain"
+version = "0.1.0"
+description = "Decision evidence chains and explainability"
+requires-python = ">=3.11"
+dependencies = [
+    "trading-core",
+    "orjson>=3.10",
+    "pydantic>=2.10.0",
+    "sqlalchemy>=2.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"explain" = "."
+
+[tool.setuptools]
+packages = ["explain"]

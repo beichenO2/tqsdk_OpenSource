@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=70.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trading-crypto"
+version = "1.0.0"
+description = "Cryptocurrency trading algorithms — fully decoupled from futures"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "scikit-learn>=1.3",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+]
+data = [
+    "httpx>=0.25",
+    "websockets>=12.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["crypto*"]

@@ -1,0 +1,76 @@
+{
+  "name": "futures_strategy_research_committee",
+  "description": "期货策略研究委员会 — 多角色审查策略研究 run 的可行性",
+  "roles": [
+    {
+      "id": "quant_analyst",
+      "name": "量化分析师",
+      "responsibility": "审查策略逻辑、参数合理性、数学假设",
+      "output_schema": {
+        "verdict": "approve|flag|reject",
+        "logic_assessment": "string",
+        "parameter_concerns": ["string"],
+        "mathematical_validity": "string",
+        "evidence_refs": ["string"]
+      },
+      "constraints": ["只产出建议，不自动修改策略参数", "必须引用具体指标值"]
+    },
+    {
+      "id": "risk_officer",
+      "name": "风控官",
+      "responsibility": "评估最大回撤、爆仓风险、尾部风险、品种集中度",
+      "output_schema": {
+        "verdict": "approve|flag|reject",
+        "max_dd_assessment": "string",
+        "tail_risk": "string",
+        "concentration_risk": "string",
+        "position_sizing_ok": "boolean",
+        "evidence_refs": ["string"]
+      },
+      "constraints": ["爆仓风险为一票否决项", "必须检查 MC-CI gate 结果"]
+    },
+    {
+      "id": "data_scientist",
+      "name": "数据科学家",
+      "responsibility": "检查数据质量、过拟合风险、样本外表现、Walk-Forward 稳定性",
+      "output_schema": {
+        "verdict": "approve|flag|reject",
+        "overfit_risk": "low|medium|high",
+        "oos_assessment": "string",
+        "wf_stability": "string",
+        "data_quality_issues": ["string"],
+        "evidence_refs": ["string"]
+      },
+      "constraints": ["必须对照 OOS 和 WF gate 结果", "过拟合判断需给出具体量化依据"]
+    },
+    {
+      "id": "market_specialist",
+      "name": "市场专家",
+      "responsibility": "评估策略适用的市场环境、品种特性、交易成本假设",
+      "output_schema": {
+        "verdict": "approve|flag|reject",
+        "market_regime_fit": "string",
+        "cost_assumptions": "string",
+        "liquidity_assessment": "string",
+        "futures_specific_checks": ["string"],
+        "evidence_refs": ["string"]
+      },
+      "constraints": ["国内期货必须检查涨跌停、夜盘、交割月限制"]
+    }
+  ],
+  "dag": {
+    "parallel_phase": ["quant_analyst", "risk_officer", "data_scientist", "market_specialist"],
+    "aggregation": {
+      "rule": "unanimous_no_reject",
+      "description": "任一角色 reject 则整体 reject；全部 approve 才通过；有 flag 则需人工复审"
+    }
+  },
+  "input": {
+    "source": "research_run",
+    "required_fields": ["metrics", "validation", "config", "backtest_results"]
+  },
+  "output": {
+    "format": "structured_committee_report",
+    "fields": ["final_verdict", "role_verdicts", "key_concerns", "recommended_actions"]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "champion_deployment_committee",
+  "description": "冠军策略部署委员会 — 审查冠军策略是否符合部署条件",
+  "roles": [
+    {
+      "id": "validation_auditor",
+      "name": "验证审计员",
+      "responsibility": "审查所有 gate check 结果、OOS/WF/MC-CI/X-Asset 是否全部通过",
+      "output_schema": {
+        "all_gates_passed": "boolean",
+        "gate_details": [{"gate": "string", "passed": "boolean", "margin": "number"}],
+        "weakest_gate": "string",
+        "confidence_level": "high|medium|low",
+        "evidence_refs": ["string"]
+      }
+    },
+    {
+      "id": "live_readiness_checker",
+      "name": "实盘就绪检查员",
+      "responsibility": "检查策略是否满足实盘条件：成本模型、滑点假设、资金容量、品种流动性",
+      "output_schema": {
+        "live_ready": "boolean",
+        "cost_model_valid": "boolean",
+        "slippage_assumption": "string",
+        "capacity_estimate": "string",
+        "liquidity_check": [{"symbol": "string", "sufficient": "boolean"}],
+        "evidence_refs": ["string"]
+      }
+    },
+    {
+      "id": "risk_controller",
+      "name": "风控总监",
+      "responsibility": "最终风控审批：最大持仓、止损设置、组合层面影响",
+      "output_schema": {
+        "verdict": "approve|conditional|reject",
+        "max_position_ok": "boolean",
+        "stop_loss_adequate": "boolean",
+        "portfolio_impact": "string",
+        "conditions": ["string"],
+        "evidence_refs": ["string"]
+      },
+      "constraints": ["不通过 validation 的策略不进入此审查", "reject 必须给出具体原因和改进建议"]
+    }
+  ],
+  "dag": {
+    "sequence": ["validation_auditor", "live_readiness_checker", "risk_controller"],
+    "gate_condition": "validation_auditor.all_gates_passed must be true to proceed"
+  },
+  "input": {
+    "source": "champion_archive + research_artifact",
+    "required_fields": ["metrics", "validation", "params", "champion_history"]
+  },
+  "output": {
+    "format": "deployment_decision",
+    "fields": ["deploy_approved", "conditions", "recommended_mode", "monitoring_plan"]
+  },
+  "constraints": ["只产出建议，不自动部署到实盘", "未过 validation 不允许提交部署审查"]
+}

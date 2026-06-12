@@ -1,0 +1,62 @@
+name: strategy_generation
+description: 策略生成技能 — 从自然语言描述生成可回测的策略代码
+category: research
+
+interface:
+  input:
+    - name: prompt
+      type: string
+      description: 策略描述（自然语言）
+    - name: timeframe
+      type: string
+      default: "5m"
+    - name: symbols
+      type: list[string]
+      default: ["rb"]
+    - name: strategy_template
+      type: string
+      default: "base"
+      options: ["base", "attack_defense", "whale_detector", "ml_signal"]
+
+  output:
+    - name: strategy_code
+      type: string
+      description: 可执行的策略 Python 代码
+    - name: param_space
+      type: dict
+      description: Optuna 参数空间定义
+    - name: data_requirements
+      type: dict
+      description: 需要的数据类型和范围
+
+tqsdk_bindings:
+  - packages/strategy/futures/   # 策略模板库
+  - packages/backtest/engine.py  # 回测引擎
+  - packages/experiment/optuna_search.py  # 参数搜索
+
+steps:
+  1_parse_intent:
+    description: 解析用户策略意图，提取关键要素
+    outputs: [strategy_type, indicators, entry_logic, exit_logic, risk_rules]
+
+  2_select_template:
+    description: 选择最接近的策略模板
+    inputs: [strategy_type]
+    outputs: [template_path, base_code]
+
+  3_customize:
+    description: 根据用户意图定制策略参数和逻辑
+    inputs: [base_code, indicators, entry_logic, exit_logic, risk_rules]
+    outputs: [strategy_code, param_space]
+
+  4_validate_syntax:
+    description: 语法检查和最小执行验证
+    inputs: [strategy_code]
+    outputs: [syntax_valid, import_valid]
+
+futures_specific:
+  - 涨跌停检查：策略必须处理 limit_up/limit_down 情况
+  - 夜盘处理：检查夜盘时段的数据连续性
+  - 交割月规避：不在交割月最后 5 个交易日开新仓
+  - 保证金计算：使用 tqsdk 提供的保证金率
+  - 手续费：按交易所标准 + 期货公司加收计算

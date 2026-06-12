@@ -1,0 +1,4 @@
+tqsdk==3.9.2
+pandas>=2.0.0
+pyarrow>=14.0.0
+websocket-client>=1.6.0

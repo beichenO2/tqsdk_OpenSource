@@ -1,0 +1,104 @@
+{
+  "best_score": 0.963279748217175,
+  "portfolio_return_pct": 54.475817083244,
+  "walk_forward": {
+    "valid": true,
+    "total_windows": 12,
+    "profitable_windows": 8,
+    "profitable_pct": 0.6666666666666666,
+    "mean_return": 0.10005935078269777,
+    "std_return": 0.11921429758983791,
+    "min_return": -0.06672220503897648,
+    "max_return": 0.2894927660940908,
+    "mean_sharpe": 0.8595746125783585,
+    "mean_max_dd": 0.0482969866484522,
+    "worst_dd": 0.08717475641511473
+  },
+  "monte_carlo": {
+    "n_simulations": 100,
+    "perturbation_pct": 0.1,
+    "survival_rate": 1.0,
+    "base_sharpe": 0.8571704306856942,
+    "base_return": 0.5447581708324406,
+    "mean_perturbed_sharpe": 0.5862487284469491,
+    "std_perturbed_sharpe": 0.16818411758981963,
+    "sharpe_degradation_pct": 31.606515173653516,
+    "mean_perturbed_return": 0.3035505374768648,
+    "pct5_return": 0.15825448967050884,
+    "pct95_return": 0.5023397792328261
+  },
+  "oos_gate": {
+    "passed": true,
+    "avg_sharpe": 0.6526713680909889,
+    "avg_return": 0.14792781056209753,
+    "avg_max_dd": 0.09231128039858276,
+    "avg_win_rate": 0.39730639730639733,
+    "avg_profit_factor": 2.146613594429349,
+    "total_trades": 47,
+    "liquidations": false,
+    "per_asset": [
+      {
+        "sharpe": 0.024642901999090118,
+        "return": -0.003062283087086399,
+        "max_dd": 0.08063122137866147,
+        "trades": 18,
+        "win_rate": 0.3333333333333333,
+        "pf": 1.055903690037006
+      },
+      {
+        "sharpe": 0.034332977290308174,
+        "return": -0.00955625607265631,
+        "max_dd": 0.12564268043218424,
+        "trades": 18,
+        "win_rate": 0.2222222222222222,
+        "pf": 1.0146232732608997
+      },
+      {
+        "sharpe": 1.8990382249835684,
+        "return": 0.4564019708460353,
+        "max_dd": 0.07065993938490257,
+        "trades": 11,
+        "win_rate": 0.6363636363636364,
+        "pf": 4.369313819990142
+      }
+    ]
+  },
+  "per_asset": {
+    "BTCUSDT": {
+      "total_return": 0.32005800311446253,
+      "sharpe": 0.6544578540763757,
+      "calmar": 3.328672223114596,
+      "max_dd": 0.09615185325005907,
+      "trades": 58,
+      "win_rate": 0.4482758620689655,
+      "profit_factor": 1.5859080792043891,
+      "liquidations": 0,
+      "halted": false,
+      "final_capital": 132.00580031144625
+    },
+    "ETHUSDT": {
+      "total_return": 0.24262989103141094,
+      "sharpe": 0.4542761195729771,
+      "calmar": 1.9311104331491125,
+      "max_dd": 0.1256426804321843,
+      "trades": 41,
+      "win_rate": 0.36585365853658536,
+      "profit_factor": 1.4538811811595962,
+      "liquidations": 0,
+      "halted": false,
+      "final_capital": 124.2629891031411
+    },
+    "SOLUSDT": {
+      "total_return": 1.0715866183514482,
+      "sharpe": 1.4627773184077297,
+      "calmar": 15.16540528734742,
+      "max_dd": 0.07065993938490248,
+      "trades": 22,
+      "win_rate": 0.6818181818181818,
+      "profit_factor": 4.825848234513315,
+      "liquidations": 0,
+      "halted": false,
+      "final_capital": 207.1586618351448
+    }
+  }
+}

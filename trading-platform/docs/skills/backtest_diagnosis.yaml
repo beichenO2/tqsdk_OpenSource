@@ -1,0 +1,129 @@
+name: backtest_diagnosis
+description: 回测诊断技能 — 分析回测结果中的问题并给出修复建议
+category: research
+
+interface:
+  input:
+    - name: run_id
+      type: string
+    - name: backtest_results
+      type: dict
+    - name: strategy_code
+      type: string
+      optional: true
+
+  output:
+    - name: diagnostics
+      type: list[DiagnosticEntry]
+    - name: severity_summary
+      type: dict
+    - name: fix_suggestions
+      type: list[string]
+
+tqsdk_bindings:
+  - packages/experiment/validation.py  # gate checks
+  - packages/backtest/engine.py        # 回测引擎
+  - eternal-optimizer/gate_report.py   # 结构化拒绝报告
+
+diagnostic_categories:
+  runtime:
+    description: 运行时错误和异常
+    checks:
+      - code: RT001
+        name: import_failure
+        description: 策略代码导入失败
+        severity: error
+        fix: 检查依赖包版本和导入路径
+
+      - code: RT002
+        name: data_missing
+        description: 回测所需数据文件缺失
+        severity: error
+        fix: 运行 data-collector 补充数据
+
+      - code: RT003
+        name: execution_timeout
+        description: 回测执行超时（单品种 > 5min）
+        severity: warning
+        fix: 减少回测时间范围或优化计算逻辑
+
+  logic:
+    description: 策略逻辑问题
+    checks:
+      - code: LG001
+        name: no_trades
+        description: 回测无成交记录
+        severity: error
+        fix: 检查入场条件是否过于严格
+
+      - code: LG002
+        name: excessive_trades
+        description: 交易频率过高（日均 > 50 笔）
+        severity: warning
+        fix: 增加最小持仓时间或冷却期
+
+      - code: LG003
+        name: one_direction_only
+        description: 策略只有多头或空头信号
+        severity: warning
+        fix: 检查做空条件逻辑
+
+      - code: LG004
+        name: negative_sharpe
+        description: Sharpe ratio < 0
+        severity: error
+        fix: 检查信号方向是否反转、成本假设是否过高
+
+      - code: LG005
+        name: max_dd_excessive
+        description: 最大回撤 > 40%
+        severity: error
+        fix: 加强止损逻辑或降低仓位
+
+      - code: LG006
+        name: liquidation_detected
+        description: 检测到爆仓（保证金不足）
+        severity: critical
+        fix: 降低 position_fraction，增加保证金缓冲
+
+  data:
+    description: 数据质量问题
+    checks:
+      - code: DT001
+        name: gap_in_data
+        description: 数据存在时间缺口
+        severity: warning
+        fix: 检查数据采集任务是否正常运行
+
+      - code: DT002
+        name: stale_data
+        description: 数据最后更新超过 7 天
+        severity: warning
+        fix: 重新运行 data-collector
+
+      - code: DT003
+        name: insufficient_history
+        description: 数据历史不足（< 1 年）
+        severity: warning
+        fix: 扩大数据范围或使用合成数据补充
+
+sop_steps:
+  1_initial_scan:
+    description: 快速扫描回测结果的基本指标
+    checks: [LG001, LG004, LG005, LG006]
+
+  2_data_quality:
+    description: 检查输入数据质量
+    checks: [DT001, DT002, DT003]
+
+  3_logic_deep_dive:
+    description: 深入分析策略逻辑问题
+    checks: [LG002, LG003]
+
+  4_gate_validation:
+    description: 运行 gate checks（OOS/WF/MC-CI/X-Asset）
+    binding: packages/experiment/validation.py
+
+  5_generate_report:
+    description: 汇总诊断结果，生成修复建议
+    output: structured_diagnostic_report

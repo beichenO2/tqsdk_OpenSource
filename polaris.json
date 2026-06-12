@@ -1,0 +1,927 @@
+{
+  "name": "tqsdk",
+  "_meta": {
+    "schema_version": "1.0",
+    "last_synced_at": "2026-06-10T00:00:00+08:00"
+  },
+  "description": "国内期货 + BTC 双市场量化交易平台",
+  "tier": "domain",
+  "status": "active",
+  "version": "3.0",
+  "requirements": [
+    {
+      "id": "R1",
+      "need": "双市场量化交易基础设施",
+      "approach": "期货 TqSdk + 加密 Binance 双市场，事件驱动回测引擎",
+      "tech": {
+        "Python": "3.13",
+        "TqSdk": "3.9.2",
+        "FastAPI": "latest",
+        "React": "18"
+      },
+      "features": [
+        {
+          "name": "期货数据采集",
+          "status": "done",
+          "tech": [
+            "TqSdk API"
+          ],
+          "interfaces": [
+            "data-collector/collector.py"
+          ],
+          "behavior": [
+            "29 品种 5min+daily 采集",
+            "存储为 Parquet"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "加密数据采集",
+          "status": "done",
+          "tech": [
+            "Binance WebSocket"
+          ],
+          "interfaces": [
+            "data-collector/binance_ws.py"
+          ],
+          "behavior": [
+            "10 币种实时 tick",
+            "需日本代理节点"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "事件驱动回测引擎",
+          "status": "done",
+          "tech": [
+            "NumPy",
+            "Pandas"
+          ],
+          "interfaces": [
+            "packages/backtest/"
+          ],
+          "behavior": [
+            "Walk-Forward",
+            "Monte Carlo",
+            "Optuna 超参搜索"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Web UI 回测可视化",
+          "status": "done",
+          "tech": [
+            "React 18",
+            "Recharts"
+          ],
+          "interfaces": [
+            "apps/web/",
+            "apps/web-btc/"
+          ],
+          "behavior": [
+            "权益曲线",
+            "交易标记",
+            "参数热力图"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "风控系统",
+          "status": "done",
+          "tech": [
+            "Python"
+          ],
+          "interfaces": [
+            "packages/risk/"
+          ],
+          "behavior": [
+            "限额引擎",
+            "风险监控"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    },
+    {
+      "id": "R2",
+      "need": "ML/DL/RL 研究平台",
+      "approach": "LightGBM/XGBoost + LSTM/Transformer + PPO RL",
+      "tech": {
+        "PyTorch": "2.11",
+        "SB3": "latest",
+        "LightGBM": "latest",
+        "Optuna": "latest"
+      },
+      "features": [
+        {
+          "name": "ML 模型训练",
+          "status": "done",
+          "tech": [
+            "LightGBM",
+            "XGBoost"
+          ],
+          "interfaces": [
+            "packages/ml/"
+          ],
+          "behavior": [
+            "特征工程管线",
+            "FuturesDataLoader"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "DL 时序策略",
+          "status": "done",
+          "tech": [
+            "PyTorch",
+            "LSTM",
+            "Transformer"
+          ],
+          "interfaces": [
+            "packages/ml/"
+          ],
+          "behavior": [
+            "LSTMModel",
+            "TransformerModel"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "RL PPO 训练",
+          "status": "done",
+          "tech": [
+            "SB3 PPO",
+            "Gymnasium",
+            "MambaFormerExtractor"
+          ],
+          "interfaces": [
+            "packages/rl/"
+          ],
+          "behavior": [
+            "MambaFormerExtractor 替代 MLP（S4D + Transformer）",
+            "DSR 奖励替代 MTM Delta",
+            "PPO 训练 1000 步后 Return > 0"
+          ],
+          "blockers": [],
+          "test_status": "passed",
+          "evidence": [
+            "2026-05-05: train_ppo.py 1000 步验证通过，Return=1.53%, Sharpe=1.38"
+          ]
+        },
+        {
+          "name": "实验管理",
+          "status": "done",
+          "tech": [
+            "Optuna"
+          ],
+          "interfaces": [
+            "packages/experiment/"
+          ],
+          "behavior": [
+            "超参搜索 (OptunaHyperSearch)",
+            "参数空间模板 (XGBoost/LightGBM/PPO)",
+            "MethodValidator 先验证再使用",
+            "OOS/WalkForward/MonteCarlo/多品种一致性 gate check"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "need": "v4.0 RL PPO 改进 — 使用 2024-2026 最新方法",
+      "approach": "MambaFormer 特征提取 + DSR 奖励 + 课程学习",
+      "tech": {
+        "Mamba": "mamba-ssm",
+        "PyTorch": "2.11",
+        "SB3": "latest"
+      },
+      "features": [
+        {
+          "name": "Differential Sharpe Ratio 奖励",
+          "status": "done",
+          "tech": [
+            "NumPy"
+          ],
+          "interfaces": [
+            "packages/rl/trading_env.py"
+          ],
+          "behavior": [
+            "DSR 替代简单 MTM Delta",
+            "风险调整密集奖励",
+            "_dsr_reward() EMA-based incremental Sharpe"
+          ],
+          "depends_on": [],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "增强观测空间",
+          "status": "done",
+          "tech": [
+            "TA-Lib",
+            "RegimeDetector"
+          ],
+          "interfaces": [
+            "packages/rl/trading_env.py"
+          ],
+          "behavior": [
+            "RSI/MACD/ATR/BB 技术指标",
+            "5 种市场体制 one-hot",
+            "多时间框架特征",
+            "10 维技术指标特征向量"
+          ],
+          "depends_on": [],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "MambaFormer Feature Extractor",
+          "status": "done",
+          "tech": [
+            "mamba-ssm",
+            "PyTorch"
+          ],
+          "interfaces": [
+            "packages/rl/mambaformer_extractor.py"
+          ],
+          "behavior": [
+            "S4D 层捕捉长程依赖",
+            "Transformer 层捕捉短期模式",
+            "兼容 SB3 BaseFeaturesExtractor",
+            "v4 模型 checkpoint 已产出"
+          ],
+          "evidence": [
+            "2026-04-27: models/rl_v4_mambaformer/ 含 final_model.zip (1.2MB) + stage_0_warmup.zip + stage_1_full.zip"
+          ],
+          "depends_on": [
+            "增强观测空间"
+          ],
+          "test_status": "not_tested"
+        },
+        {
+          "name": "课程学习 + 多品种训练",
+          "status": "done",
+          "tech": [
+            "SB3",
+            "SubprocVecEnv"
+          ],
+          "interfaces": [
+            "packages/rl/curriculum.py"
+          ],
+          "behavior": [
+            "4 阶段渐进训练 (low_vol → full)",
+            "CurriculumTrainer 编排器",
+            "波动率过滤 + 渐进难度"
+          ],
+          "depends_on": [
+            "MambaFormer Feature Extractor"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "need": "策略库持续进化",
+      "approach": "2024-2026 最新量化方法开发新策略",
+      "tech": {},
+      "features": [
+        {
+          "name": "加密策略库",
+          "status": "done",
+          "tech": [
+            "Python"
+          ],
+          "interfaces": [
+            "packages/crypto/strategies/"
+          ],
+          "behavior": [
+            "52 个策略文件",
+            "Top: smart_money_fvg Sharpe 0.822"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "期货策略库",
+          "status": "done",
+          "tech": [
+            "Python"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/"
+          ],
+          "behavior": [
+            "50 个策略文件",
+            "含日内交易框架"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "永续自进化优化器",
+          "status": "done",
+          "tech": [
+            "Optuna",
+            "LLM 引导进化",
+            "MambaFormer v4"
+          ],
+          "interfaces": [
+            "eternal-optimizer/"
+          ],
+          "behavior": [
+            "6 个优化器变体 (1h/5min/volbar/futures) + supervisor",
+            "收敛→进化→重启",
+            "代际记忆",
+            "overfit 检测 (X-Asset/OOS/MC-CI/WF)",
+            "deploy 硬门控：OOS+WF+MC 全过才允许 paper（scripts/run_overfit_validation.py）",
+            "多资产 WF 使用 common-era 对齐（SOL/BTC 自 2020-09 共同可交易区间）",
+            "WF 失败回退：scripts/run_wf_robust_search.py（Optuna 搜索全门控参数）",
+            "智能停止条件 (max_consecutive_rejections/max_total_trials/max_runtime_hours)",
+            "结构化 gate 拒绝报告 (rejected_by/metrics/severity)",
+            "自适应搜索调整 (OOS→增大正则化 / MC-CI→低波动偏向 / WF→增大窗口 / X-Asset→减少品种特异性)",
+            "LLM 服务 404 降级方案 (多服务端点回退)",
+            "MambaFormer v4 特征提取器集成 (1h/5min 优化器)",
+            "mamba_threshold 动量过滤参数",
+            "5min 优化器: EMA 趋势确认滤波器",
+            "5min 优化器: MambaFormer 动量 + 趋势双确认入场"
+          ],
+          "blockers": [],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "冠军保存体系",
+          "status": "done",
+          "tech": [
+            "Python",
+            "JSON"
+          ],
+          "interfaces": [
+            "eternal-optimizer/champion_archive.py",
+            "champions/{variant}/{snapshot}/"
+          ],
+          "behavior": [
+            "每次达到新最佳分数时自动保存快照到 champions/{variant}/",
+            "快照包含 params.json + metrics.json + champion.json",
+            "leaderboard.json 按分数排序记录所有冠军",
+            "新一代进化不覆盖历史冠军",
+            "已集成到 1h/5min/volbar 三个优化器变体"
+          ],
+          "evidence": [
+            "2026-04-29: 从 930 轮历史结果中恢复最佳 score=7.877(round 164)，现有 optuna_eternal_best.json 仅记录 3.521(round 472)"
+          ],
+          "test_status": "not_tested"
+        },
+        {
+          "name": "Lobster SDK 适配",
+          "status": "done",
+          "tech": [
+            "Python"
+          ],
+          "interfaces": [
+            "trading-platform/lobster_adapter.py",
+            "lobster/targets/.gitkeep"
+          ],
+          "behavior": [
+            "emit_event() 写入 lobster-events.jsonl（backtest_error/submit_failure/optimizer_crash/gate_rejection）",
+            "get_status() 返回优化器状态、API 健康、近期错误计数",
+            "get_health() 返回 pass/fail 综合健康检查",
+            "run_smoke_tests() 执行数据可用性/回测导入/优化器/API/RL 五项冒烟测试",
+            "supervisor 和 1h 优化器已集成事件写入钩子"
+          ],
+          "depends_on": [
+            "PolarClaw/polarclaw-project-sdk"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-05-25: trading-platform/scripts/run_smoke.py 5/5 passed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "need": "实盘量化交易能力 — 策略→交易所→监控→持久化",
+      "approach": "LiveScheduler 统一调度 + WebSocket 实时推送 + SQLite 持久化 + 参数自动部署",
+      "tech": {
+        "FastAPI": "latest",
+        "React": "18",
+        "SQLite": "WAL mode",
+        "WebSocket": "native"
+      },
+      "features": [
+        {
+          "name": "LiveScheduler 实盘通道",
+          "status": "done",
+          "tech": [
+            "Python",
+            "asyncio"
+          ],
+          "interfaces": [
+            "packages/sim_live/live_scheduler.py"
+          ],
+          "behavior": [
+            "paper/live 模式一键切换",
+            "策略信号 → ExecutionService → BrokerAdapter",
+            "复用 PaperScheduler 调度逻辑"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "统一实时数据源",
+          "status": "done",
+          "tech": [
+            "TqSdk",
+            "Binance WebSocket"
+          ],
+          "interfaces": [
+            "packages/sim_live/live_feed.py"
+          ],
+          "behavior": [
+            "TqSdkLiveFeed 期货 K 线订阅",
+            "UnifiedLiveFeed 双市场混合源"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "WebSocket 实时推送",
+          "status": "done",
+          "tech": [
+            "FastAPI WebSocket",
+            "EventBus"
+          ],
+          "interfaces": [
+            "apps/api/app/routers/ws.py",
+            "packages/core/event_bus.py"
+          ],
+          "behavior": [
+            "6 种事件推送: position/trade/account/strategy/signal/risk",
+            "频道订阅机制",
+            "EventBus 单例进程内异步分发"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "SQLite 交易持久化",
+          "status": "done",
+          "tech": [
+            "SQLite",
+            "WAL"
+          ],
+          "interfaces": [
+            "packages/core/persistence.py"
+          ],
+          "behavior": [
+            "orders/fills/equity_snapshots/strategy_sessions 4 表",
+            "WAL 模式高并发",
+            "服务重启数据零丢失"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Live Trading API",
+          "status": "done",
+          "tech": [
+            "FastAPI"
+          ],
+          "interfaces": [
+            "apps/api/app/routers/live_trading.py"
+          ],
+          "behavior": [
+            "start/stop/switch-mode/status/strategies/toggle",
+            "实时排行榜",
+            "paper/live 模式切换"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "参数部署 API",
+          "status": "done",
+          "tech": [
+            "FastAPI",
+            "Optuna"
+          ],
+          "interfaces": [
+            "apps/api/app/routers/deploy.py"
+          ],
+          "behavior": [
+            "Optuna 最优参数导出",
+            "策略参数部署/回滚",
+            "部署历史追踪"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "前端 WebSocket + Live Trading hooks",
+          "status": "done",
+          "tech": [
+            "React",
+            "TypeScript"
+          ],
+          "interfaces": [
+            "apps/web/src/hooks/useWebSocket.ts",
+            "apps/web/src/hooks/useLiveTrading.ts",
+            "apps/web/src/services/api.ts"
+          ],
+          "behavior": [
+            "自动重连 WebSocket",
+            "useLiveEvents/useLiveTradingStatus hooks",
+            "API 服务层统一封装"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "need": "攻防建模 — 假设市场只有买卖两股力量，永不消失，对市场进行动力学建模",
+      "approach": "Lotka-Volterra 竞争模型变体，从量价+OI 估计攻防力量，力量比/动量/背离产生交易信号",
+      "tech": {
+        "NumPy": "latest",
+        "Python": "3.13"
+      },
+      "features": [
+        {
+          "name": "攻防力量估计引擎",
+          "status": "done",
+          "tech": [
+            "NumPy"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/attack_defense.py"
+          ],
+          "behavior": [
+            "Lee-Ready 量价分解（V_buy/V_sell）",
+            "OI 增量修正（新多/新空/平仓方向判断）",
+            "Lotka-Volterra 离散递推（交叉抑制 + 正性约束）",
+            "力量永不归零（max(ε, ...)保证）"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "攻防交易信号",
+          "status": "done",
+          "tech": [
+            "NumPy"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/attack_defense.py"
+          ],
+          "behavior": [
+            "力量比 R(t) 突破阈值 + 动量确认 → 入场",
+            "力量-价格背离检测 → 反转信号",
+            "力量加速度确认 → 趋势追加",
+            "力量失势 + ATR 止损止盈 → 出场"
+          ],
+          "evidence": [
+            "2026-04-27 git f385311: 商品期货适配 4/5 品种盈利"
+          ],
+          "test_status": "not_tested"
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "need": "庄家识别技术路线 — 假设庄家存在，跟随庄家交易",
+      "approach": "基于12+全球处罚案例的5种操纵模式检测 + 加权复合评分 + Optuna可调 + 特征导出训练",
+      "tech": {
+        "NumPy": "latest",
+        "Python": "3.13",
+        "Optuna": "latest"
+      },
+      "features": [
+        {
+          "name": "多模式庄家行为检测引擎",
+          "status": "done",
+          "tech": [
+            "NumPy"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/whale_detector.py"
+          ],
+          "behavior": [
+            "模式A: 持仓集中度 (甲醇1501/普麦1601案)",
+            "模式B: Spoofing近似 (Sarao/JPM案, bar级替代)",
+            "模式C: Variance Ratio偏离 (Da Vinci锯齿形模式)",
+            "模式D: 量价背离/对倒检测 (普麦1601案)",
+            "模式E: 逼仓崩盘信号 (OI骤降+价格暴跌)",
+            "加权复合评分 (权重可通过Optuna优化)"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "跟庄交易策略",
+          "status": "done",
+          "tech": [
+            "NumPy"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/whale_detector.py"
+          ],
+          "behavior": [
+            "四阶段模型: 吸筹→拉升→出货→砸盘",
+            "吸筹跟庄 + 拉升追涨 + 出货离场 + 砸盘反手",
+            "ATR 动态止损止盈",
+            "高异常得分弱信号探测"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "训练与回测支持",
+          "status": "done",
+          "tech": [
+            "NumPy",
+            "Optuna"
+          ],
+          "interfaces": [
+            "packages/strategy/futures/whale_detector.py"
+          ],
+          "behavior": [
+            "WhaleFeatureRow 特征向量导出 (7维)",
+            "get_features_array() / get_labels_array() 用于外部ML训练",
+            "标签列支持 (有标签/无标签数据均可回测)",
+            "OPTUNA_PARAM_SPACE 完整参数空间模板 (21个可调参数)",
+            "与现有 BacktestEngine 完全兼容"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "need": "自然语言策略研究工作台",
+      "approach": "在现有 trading-platform 上扩展 research run 管理、技能库、swarm 审计委员会、research artifact 导出",
+      "tech": {
+        "FastAPI": "latest",
+        "Python": "3.13"
+      },
+      "features": [
+        {
+          "name": "研究 Run 管理",
+          "status": "done",
+          "tech": [
+            "Python",
+            "FastAPI"
+          ],
+          "interfaces": [
+            "GET /api/v1/research/runs",
+            "POST /api/v1/research/runs",
+            "GET /api/v1/research/runs/{id}",
+            "PATCH /api/v1/research/runs/{id}",
+            "POST /api/v1/research/runs/{id}/execute",
+            "POST /api/v1/research/runs/{id}/diagnostics",
+            "POST /api/v1/research/runs/{id}/iterations",
+            "POST /api/v1/research/runs/{id}/validation",
+            "POST /api/v1/research/agentic-cycle"
+          ],
+          "behavior": [
+            "ResearchRun 数据结构：prompt→config→backtest→diagnostics→validation→iterations",
+            "RunStore 文件持久化（JSON per run）",
+            "背景执行：调用现有 BacktestEngine 跑策略回测",
+            "诊断分类：runtime/logic/data 三类",
+            "Validation gate 集成（OOS/WF/MC-CI/X-Asset）",
+            "Agentic 三环：DiGist Idea → strategy_adapter Factor → overfit Eval → ResearchRun + daily report"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Research Artifact 导出",
+          "status": "done",
+          "tech": [
+            "Python",
+            "JSON Schema"
+          ],
+          "interfaces": [
+            "GET /api/v1/research/runs/{id}/artifact",
+            "GET /api/v1/research/runs/{id}/artifact/markdown"
+          ],
+          "behavior": [
+            "JSON 导出符合 contracts/research_artifact.schema.json",
+            "Markdown 导出供 KnowLever 消费（含 run_id 追溯）",
+            "只有 completed 状态的 run 才能导出 artifact"
+          ],
+          "depends_on": [
+            "研究 Run 管理"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "策略技能库与诊断 SOP",
+          "status": "done",
+          "interfaces": [
+            "docs/skills/strategy_generation.yaml",
+            "docs/skills/backtest_diagnosis.yaml",
+            "docs/skills/risk_factor_analysis.yaml",
+            "docs/skills/report_export.yaml"
+          ],
+          "behavior": [
+            "4 个技能定义（策略生成/回测诊断/因子风险/导出）",
+            "12 项诊断检查（RT001-RT003, LG001-LG006, DT001-DT003）",
+            "国内期货专项检查（涨跌停/夜盘/交割月/保证金/手续费）",
+            "每个技能绑定 tqsdk 真实接口路径"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        },
+        {
+          "name": "Swarm 审计委员会",
+          "status": "done",
+          "interfaces": [
+            "docs/swarm-presets/futures_strategy_research_committee.json",
+            "docs/swarm-presets/optimizer_failure_review_board.json",
+            "docs/swarm-presets/champion_deployment_committee.json"
+          ],
+          "behavior": [
+            "3 个 DAG preset 定义（研究委员会/优化器审查/部署委员会）",
+            "每个角色有结构化 output_schema",
+            "约束：只产出建议，不自动改优化器或部署",
+            "aggregation 规则：unanimous_no_reject / sequence gate"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-06-10: feature verified in codebase (L2 gate audit backfill)"
+          ]
+        }
+      ],
+      "blockers": []
+    }
+  ],
+    {
+      "id": "R5",
+      "need": "网站与策略对接 — 全链路贯通",
+      "approach": "策略 @auto_register → StrategyRegistry → API /backtest/strategy-names → 前端动态加载；回测结果 JSON → /backtest/results → StrategyDetail 页面；模拟盘 sim_live → /paper-trading API → PaperTrading 页面",
+      "features": [
+        {
+          "name": "策略自动注册到前端",
+          "status": "done",
+          "tech": ["Python", "FastAPI", "React"],
+          "behavior": [
+            "load_all_strategies() 加载 futures + btc + crypto.strategies",
+            "crypto/strategies/__init__.py 显式导入 39 个策略触发 @auto_register",
+            "GET /backtest/strategy-names 返回 80+ 已注册策略",
+            "前端 BacktestForm 动态加载策略列表"
+          ]
+        },
+        {
+          "name": "回测结果与策略详情打通",
+          "status": "done",
+          "tech": ["FastAPI", "React", "Recharts"],
+          "behavior": [
+            "GET /backtest/results 加载 models/backtest_*.json",
+            "StrategyDetail 页面展示指标/雷达图/跨品种对比",
+            "买卖点证据链（需回测引擎序列化 EvidenceChain）"
+          ]
+        },
+        {
+          "name": "加密策略注册到 Registry",
+          "status": "done",
+          "tech": ["Python"],
+          "behavior": [
+            "39 个加密策略通过 @auto_register 注册",
+            "CryptoStrategyRegistry 提供 crypto-only 查询"
+          ]
+        },
+        {
+          "name": "模拟盘执行链路",
+          "status": "done",
+          "tech": ["Python", "FastAPI", "React"],
+          "behavior": [
+            "sim_live 包：engine + strategy_factory + paper_scheduler + realtime_feed",
+            "execution 包：engine + broker_adapter + tqsdk_adapter + order_manager",
+            "PaperTrading 页面：排行榜 + 账号详情 + 净值曲线 + 策略分类统计",
+            "GET /paper-trading/catalog 展示 200 个 SOTA 策略"
+          ]
+        }
+      ]
+    }
+  ],
+  "tech": {
+    "runtime": {
+      "Python": "3.13",
+      "Node": "20"
+    },
+    "ml": {
+      "PyTorch": "2.11",
+      "LightGBM": "latest",
+      "SB3": "latest",
+      "Optuna": "latest"
+    },
+    "data": {
+      "TqSdk": "3.9.2",
+      "Binance": "WebSocket",
+      "Pandas": "latest",
+      "Parquet": "pyarrow"
+    },
+    "web": {
+      "FastAPI": "latest",
+      "React": "18",
+      "Vite": "latest"
+    }
+  },
+  "depends_on": [
+    "PolarPrivate",
+    "PolarPort/sdk",
+    "PolarClaw/polarclaw-project-sdk"
+  ],
+  "port_sdk": {
+    "tqtrader-api": {
+      "entry": "trading-platform/apps/api/main.py (__main__)",
+      "service": "tqtrader-api",
+      "env_override": "TQTRADER_PORT",
+      "default_port": 8000,
+      "added": "2026-05-01"
+    }
+  },
+  "service_management": {
+    "install_command": "cd data-collector && pip install -r requirements.txt",
+    "start_command": "cd data-collector && python collector.py",
+    "restart_command": "cd data-collector && python collector.py",
+    "health_endpoint": "http://127.0.0.1:18900/health"
+  },
+  "contacts": {
+    "last_updated": "2026-05-25",
+    "updated_by": "solo-web-58ec894e",
+    "batch": "2026-05-25-ssot-sync"
+  }
+}

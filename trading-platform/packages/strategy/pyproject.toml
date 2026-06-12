@@ -1,0 +1,21 @@
+[project]
+name = "trading-strategy"
+version = "0.1.0"
+description = "Strategy abstraction, registry, and strategy implementations"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.10.0",
+    "trading-core",
+    "trading-execution",
+    "trading-backtest",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"strategy" = "."
+
+[tool.setuptools]
+packages = ["strategy", "strategy.btc", "strategy.futures"]

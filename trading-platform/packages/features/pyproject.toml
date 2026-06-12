@@ -1,0 +1,19 @@
+[project]
+name = "trading-features"
+version = "0.1.0"
+description = "Factor and feature engineering for the trading platform"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26.0",
+    "pandas>=2.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"features" = "."
+
+[tool.setuptools]
+packages = ["features"]

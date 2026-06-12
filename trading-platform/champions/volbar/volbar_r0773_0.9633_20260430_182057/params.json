@@ -1,0 +1,23 @@
+{
+  "lookback": 10,
+  "tp_atr_mult": 5.013554947943956,
+  "sl_atr_mult": 1.6242304748260965,
+  "max_hold_bars": 34,
+  "cooldown_bars": 5,
+  "vol_ma_period": 15,
+  "vol_surge_mult": 1.323243071627558,
+  "tbr_long_min": 0.5507288090522199,
+  "tbr_short_max": 0.39821882229678424,
+  "atr_period": 17,
+  "position_fraction": 0.1460876467475777,
+  "max_dd_halt": 0.4521724425892619,
+  "max_loss_per_trade": 0.09783212483324508,
+  "regime_window": 93,
+  "cluster_strength_threshold": 0.2088308227889651,
+  "order_flow_imbalance_period": 18,
+  "vwap_deviation_threshold": 0.013047537069154853,
+  "multi_timeframe_confluence_bars": 2,
+  "inter_market_correlation_lag": 1,
+  "cyclical_pattern_period": 34,
+  "adx_period": 14
+}

@@ -1,0 +1,82 @@
+[project]
+name = "trading-platform"
+version = "0.1.0"
+description = "Quantitative Trading Platform — Futures (TqSdk) & Crypto (BTC)"
+requires-python = ">=3.11"
+license = {text = "Proprietary"}
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "sqlalchemy>=2.0",
+    "sqlmodel>=0.0.22",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "polars>=1.18",
+    "pandas>=2.2",
+    "numpy>=2.1",
+    "duckdb>=1.1",
+    "pyarrow>=18.0",
+    "tqsdk==3.9.2",
+    "gymnasium>=1.0",
+    "torch>=2.5",
+    "xgboost>=2.1",
+    "lightgbm>=4.5",
+    "stable-baselines3>=2.4",
+    "optuna>=4.1",
+    "ray>=2.40",
+    "httpx>=0.28",
+    "websockets>=14.0",
+    "python-dotenv>=1.0",
+    "loguru>=0.7",
+    "pydantic-settings>=2.6",
+    "tenacity>=9.0",
+    "orjson>=3.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "httpx>=0.28",
+]
+
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = [
+    ".",
+    "apps/api",
+    "packages/core",
+    "packages/backtest",
+    "packages/broker_tqsdk",
+    "packages/broker_crypto/src",
+    "packages/security/src",
+    "packages/risk",
+    "packages/sim_live",
+    "packages",
+]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

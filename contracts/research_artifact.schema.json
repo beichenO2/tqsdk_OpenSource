@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tqsdk/research_artifact",
+  "title": "Research Artifact",
+  "description": "Exportable research artifact from tqsdk strategy research workbench. Consumed by KnowLever (Markdown/metadata) and AutoOffice (structured report data).",
+  "type": "object",
+  "required": ["run_id", "variant", "data_range", "params", "metrics", "validation", "decision"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique research run identifier"
+    },
+    "variant": {
+      "type": "string",
+      "description": "Strategy variant name"
+    },
+    "data_range": {
+      "type": "string",
+      "description": "Date range of backtest data (e.g., '2024-01-01/2025-12-31')"
+    },
+    "params": {
+      "type": "object",
+      "description": "Strategy parameters used in this run",
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Performance metrics",
+      "properties": {
+        "sharpe": { "type": "number" },
+        "total_return": { "type": "number" },
+        "max_dd": { "type": "number" },
+        "calmar": { "type": "number" },
+        "win_rate": { "type": "number" },
+        "profit_factor": { "type": "number" },
+        "total_trades": { "type": "integer" },
+        "avg_sharpe": { "type": "number" },
+        "avg_return": { "type": "number" },
+        "avg_max_dd": { "type": "number" },
+        "symbols_tested": { "type": "integer" }
+      },
+      "additionalProperties": true
+    },
+    "validation": {
+      "type": "object",
+      "description": "Gate check validation results",
+      "properties": {
+        "gates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gate": { "type": "string" },
+              "passed": { "type": "boolean" },
+              "metrics": { "type": "object" },
+              "thresholds": { "type": "object" }
+            },
+            "required": ["gate", "passed"]
+          }
+        },
+        "all_passed": { "type": "boolean" }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "description": "Risk metrics subset",
+      "properties": {
+        "max_dd": { "type": "number" },
+        "sharpe": { "type": "number" },
+        "calmar": { "type": "number" },
+        "var_95": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "paths": {
+      "type": "object",
+      "description": "File paths to related artifacts",
+      "additionalProperties": { "type": "string" }
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "rejected", "pending"],
+      "description": "Final decision based on validation gates"
+    }
+  }
+}

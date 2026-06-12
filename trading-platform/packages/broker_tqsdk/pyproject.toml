@@ -1,0 +1,18 @@
+[project]
+name = "broker-tqsdk"
+version = "0.1.0"
+description = "TqSdk 期货接入封装"
+requires-python = ">=3.11"
+dependencies = [
+    "trading-core",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "tqsdk>=3.7.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["broker_tqsdk*"]

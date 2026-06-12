@@ -1,0 +1,11 @@
+# CODEOWNERS — tqsdk 沙箱内 / 沙箱外 写权限分发
+
+# 默认（沙箱内）：仅 tqsdk 负责 Agent
+*                       @tqsdk-agent
+
+# 沙箱外：所有 Agent 可读写
+/contracts/             @tqsdk-agent @other-agents
+/tests/contracts/       @tqsdk-agent @other-agents
+
+# 项目龙虾目录：PolarPilot 写
+/lobster/               @polarpilot-agent

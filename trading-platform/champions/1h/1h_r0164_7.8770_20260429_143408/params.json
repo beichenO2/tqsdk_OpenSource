@@ -1,0 +1,20 @@
+{
+  "lookback": 2,
+  "tp_atr_mult": 2.487530762980306,
+  "sl_atr_mult": 1.5264911564025252,
+  "max_hold_bars": 84,
+  "cooldown_bars": 3,
+  "vol_ma_period": 21,
+  "vol_surge_mult": 1.4851447188993263,
+  "tbr_long_min": 0.2324164119583237,
+  "tbr_short_max": 0.4200455391192787,
+  "nbz_threshold": 1.1246504571590974,
+  "ats_threshold": 0.6178909400841857,
+  "atr_period": 21,
+  "adx_min": 10.045353511555767,
+  "vol_regime_period": 73,
+  "vol_regime_max": 1.0365431396115128,
+  "trail_atr_mult": 0.126165422375629,
+  "trail_dist_atr": 0.0571134051077811,
+  "adx_period": 14
+}
