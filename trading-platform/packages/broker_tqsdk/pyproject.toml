@@ -8,6 +8,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.0",
     "tqsdk>=3.7.0",
+    "httpx>=0.28.0",
 ]
 
 [build-system]

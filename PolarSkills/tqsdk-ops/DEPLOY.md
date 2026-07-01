@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- 技术栈：Python, TqSdk (期货), Binance API (加密)
+- 技术栈：Python, TqSdk gateway (期货), WEEX via PolarPrivate (加密实盘)
 - 安装：`cd data-collector && pip install -r requirements.txt`
 
 ## 安装步骤

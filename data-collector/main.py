@@ -236,46 +236,46 @@ def run_futures_tick_thread(creds: dict[str, str], tick_buf: "TickBuffer") -> No
 
 def run_collection_loop() -> None:
     from health import start_health_server, update_status
-    from collector import CRYPTO_SYMBOLS, collect_crypto_klines
+    from collector import CRYPTO_SYMBOLS, collect_crypto_klines, collect_futures_klines_via_gateway
     from tick_recorder import TickBuffer
+
+    gateway_url = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891").rstrip("/")
 
     start_health_server()
     update_status(status="initializing")
     logger.info("health server started on port 18900")
 
-    pp = PrivPortalClient()
-    if not pp.wait_for_availability():
-        update_status(status="error", error="PolarPrivate not available")
-        logger.error("PolarPrivate not available after retries, exiting")
+    # Wait for TqSdk gateway (credentials live only in gateway process)
+    gateway_ready = False
+    for attempt in range(1, PP_MAX_RETRIES + 1):
+        if _shutdown.is_set():
+            break
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"{gateway_url}/health", timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+            if data.get("connected"):
+                gateway_ready = True
+                logger.info("TqSdk gateway ready at %s (attempt %d)", gateway_url, attempt)
+                break
+            logger.info("gateway up but TqSdk not connected yet (attempt %d/%d)", attempt, PP_MAX_RETRIES)
+        except Exception:
+            logger.info("waiting for TqSdk gateway at %s... (attempt %d/%d)", gateway_url, attempt, PP_MAX_RETRIES)
+        time.sleep(PP_RETRY_INTERVAL)
+
+    if not gateway_ready:
+        update_status(status="error", error="TqSdk gateway not available")
+        logger.error("TqSdk gateway not ready at %s, exiting", gateway_url)
         sys.exit(1)
 
-    update_status(credentials=True)
+    update_status(credentials=True, gateway=gateway_url)
 
-    creds = fetch_tqsdk_credentials(pp)
-    if not creds:
-        update_status(status="error", error="Cannot obtain TqSdk credentials via D-class grant")
-        logger.error("D-class grant failed, exiting")
-        sys.exit(1)
-
-    # ── tick buffers ──
     futures_tick_buf = TickBuffer("futures", flush_interval=60)
     crypto_tick_buf = TickBuffer("crypto", flush_interval=30)
     futures_tick_buf.start()
     crypto_tick_buf.start()
 
-    # ── futures tick thread ──
-    futures_thread = None
-    if creds:
-        futures_thread = Thread(
-            target=run_futures_tick_thread,
-            args=(creds, futures_tick_buf),
-            daemon=True,
-            name="futures-tick",
-        )
-        futures_thread.start()
-        logger.info("futures tick thread started")
-    else:
-        logger.warning("no TqSdk credentials, futures tick recording disabled")
+    logger.info("futures tick recording disabled — use gateway HTTP kline snapshots instead")
 
     # ── binance websocket ──
     binance_stream = None
@@ -306,9 +306,19 @@ def run_collection_loop() -> None:
             logger.debug("Task submit failed: %s", e)
 
     last_crypto_kline = 0.0
+    last_futures_kline = 0.0
 
     while not _shutdown.is_set():
         now = time.time()
+
+        if now - last_futures_kline >= FUTURES_KLINE_INTERVAL:
+            try:
+                n = collect_futures_klines_via_gateway(gateway_url=gateway_url)
+                update_status(last_futures_collection=datetime.now().isoformat(), futures_pairs=n)
+                logger.info("futures kline snapshot via gateway: %d symbols", n)
+            except Exception as e:
+                logger.error("futures kline error: %s", e)
+            last_futures_kline = now
 
         if now - last_crypto_kline >= CRYPTO_KLINE_INTERVAL:
             try:

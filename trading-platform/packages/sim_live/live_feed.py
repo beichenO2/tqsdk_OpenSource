@@ -94,6 +94,76 @@ class TqSdkLiveFeed:
         logger.info("TqSdkLiveFeed stopped")
 
 
+class TqGatewayLiveFeed:
+    """Poll TqSdk Gateway for closed kline bars (no local TqApi)."""
+
+    def __init__(
+        self,
+        symbols: list[str],
+        interval: str = "5m",
+        on_bar: OnBarCallback | None = None,
+        gateway_url: str | None = None,
+    ) -> None:
+        import os
+
+        self.symbols = symbols
+        self.interval = interval
+        self._on_bar = on_bar
+        self._gateway_url = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")).rstrip("/")
+        self._running = False
+        self._last_ts: dict[str, int] = {}
+
+    async def start(self) -> None:
+        import httpx
+
+        self._running = True
+        dur_map = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600}
+        duration = dur_map.get(self.interval, 300)
+        poll_seconds = min(max(duration // 10, 5), 60)
+        logger.info(
+            "TqGatewayLiveFeed started: %d symbols, interval=%s, gateway=%s",
+            len(self.symbols), self.interval, self._gateway_url,
+        )
+
+        async with httpx.AsyncClient(base_url=self._gateway_url, timeout=30.0) as client:
+            while self._running:
+                for symbol in self.symbols:
+                    try:
+                        resp = await client.get(
+                            f"/api/v1/market/klines/{symbol}",
+                            params={"duration": duration, "length": 3},
+                        )
+                        resp.raise_for_status()
+                        items = resp.json().get("items", [])
+                        if len(items) < 2:
+                            continue
+                        closed = items[-2]
+                        ts = int(closed["datetime"])
+                        if self._last_ts.get(symbol) == ts:
+                            continue
+                        self._last_ts[symbol] = ts
+                        bar = {
+                            "timestamp": datetime.fromtimestamp(ts / 1e9, tz=timezone.utc).isoformat(),
+                            "open": float(closed["open"]),
+                            "high": float(closed["high"]),
+                            "low": float(closed["low"]),
+                            "close": float(closed["close"]),
+                            "volume": float(closed["volume"]),
+                        }
+                        if self._on_bar:
+                            result = self._on_bar(symbol, bar)
+                            if asyncio.iscoroutine(result):
+                                await result
+                    except Exception as e:
+                        if self._running:
+                            logger.warning("TqGatewayLiveFeed error for %s: %s", symbol, e)
+                await asyncio.sleep(poll_seconds)
+
+    async def stop(self) -> None:
+        self._running = False
+        logger.info("TqGatewayLiveFeed stopped")
+
+
 class UnifiedLiveFeed:
     """统一实时数据源 — 同时支持期货和加密市场。
 
@@ -110,19 +180,28 @@ class UnifiedLiveFeed:
         crypto_interval: str = "1m",
         on_bar: OnBarCallback | None = None,
         tq_api: Any = None,
+        gateway_url: str | None = None,
     ) -> None:
         self._on_bar = on_bar
-        self._futures_feed: TqSdkLiveFeed | None = None
+        self._futures_feed: TqSdkLiveFeed | TqGatewayLiveFeed | None = None
         self._crypto_feed: Any = None
         self._tasks: list[asyncio.Task] = []
 
         if futures_symbols:
-            self._futures_feed = TqSdkLiveFeed(
-                symbols=futures_symbols,
-                interval=futures_interval,
-                on_bar=on_bar,
-                tq_api=tq_api,
-            )
+            if tq_api is not None:
+                self._futures_feed = TqSdkLiveFeed(
+                    symbols=futures_symbols,
+                    interval=futures_interval,
+                    on_bar=on_bar,
+                    tq_api=tq_api,
+                )
+            else:
+                self._futures_feed = TqGatewayLiveFeed(
+                    symbols=futures_symbols,
+                    interval=futures_interval,
+                    on_bar=on_bar,
+                    gateway_url=gateway_url,
+                )
 
         if crypto_symbols:
             from .realtime_feed import BinanceKlineFeed

@@ -102,6 +102,57 @@ def collect_futures_klines(api: object, symbols: list[str] | None = None) -> int
     return collected
 
 
+def collect_futures_klines_via_gateway(
+    gateway_url: str | None = None,
+    symbols: list[str] | None = None,
+) -> int:
+    """Fetch daily + 5min klines via TqSdk Gateway HTTP API (no local credentials)."""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    try:
+        import pandas as pd
+    except ImportError:
+        logger.error("pandas not installed, skipping futures kline collection")
+        return 0
+
+    base = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")).rstrip("/")
+    symbols = symbols or FUTURES_SYMBOLS
+    FUTURES_CACHE.mkdir(parents=True, exist_ok=True)
+    collected = 0
+
+    def _fetch(sym: str, duration: int, length: int) -> list[dict]:
+        url = f"{base}/api/v1/market/klines/{urllib.parse.quote(sym, safe='')}?duration={duration}&length={length}"
+        with urllib.request.urlopen(url, timeout=60) as resp:
+            body = json.loads(resp.read().decode())
+        return body.get("items", [])
+
+    for sym in symbols:
+        try:
+            daily = _fetch(sym, 86400, 200)
+            if daily:
+                df = pd.DataFrame(daily)
+                safe_name = sym.replace("@", "_").replace(".", "_")
+                path = FUTURES_CACHE / f"{safe_name}_daily.parquet"
+                df.to_parquet(path, index=False)
+                logger.info("saved %d daily bars for %s → %s", len(df), sym, path.name)
+
+            bars_5m = _fetch(sym, 300, 500)
+            if bars_5m:
+                df = pd.DataFrame(bars_5m)
+                safe_name = sym.replace("@", "_").replace(".", "_")
+                path = FUTURES_CACHE / f"{safe_name}_5m.parquet"
+                df.to_parquet(path, index=False)
+                logger.info("saved %d 5m bars for %s → %s", len(df), sym, path.name)
+
+            collected += 1
+        except Exception as e:
+            logger.warning("failed to collect %s via gateway: %s", sym, e)
+
+    return collected
+
+
 def _get_proxy_handler() -> urllib.request.ProxyHandler | None:
     """Auto-detect Clash Verge proxy for Binance REST API."""
     import urllib.request

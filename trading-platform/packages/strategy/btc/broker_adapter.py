@@ -45,14 +45,14 @@ class CryptoBrokerAdapter(BrokerAdapter):
     用法::
 
         from strategy.btc.broker_adapter import CryptoBrokerAdapter
-        adapter = CryptoBrokerAdapter(exchange_adapter, default_exchange="binance")
+        adapter = CryptoBrokerAdapter(exchange_adapter, default_exchange="weex")
         execution_engine.register_broker("crypto", adapter)
     """
 
     def __init__(
         self,
         exchange_adapter: ExchangeAdapter,
-        default_exchange: str = "binance",
+        default_exchange: str = "weex",
     ) -> None:
         self._adapter = exchange_adapter
         self._default_exchange = default_exchange

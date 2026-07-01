@@ -147,18 +147,19 @@ class TestBtcExchangeEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert "exchanges" in data
-        assert len(data["exchanges"]) >= 2
-        binance = next(e for e in data["exchanges"] if e["id"] == "binance")
-        assert binance["connected"] is True
+        assert len(data["exchanges"]) == 1
+        weex = data["exchanges"][0]
+        assert weex["id"] == "weex"
 
-    def test_exchange_status_binance_connected(self, client: TestClient):
-        resp = client.get("/api/v1/btc/exchanges/binance/status")
+    def test_exchange_status_weex(self, client: TestClient):
+        resp = client.get("/api/v1/btc/exchanges/weex/status")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["connected"] is True
+        assert data["exchange"] == "weex"
+        assert "connected" in data
 
-    def test_exchange_status_okx_not_connected(self, client: TestClient):
-        resp = client.get("/api/v1/btc/exchanges/okx/status")
+    def test_exchange_status_unknown_not_connected(self, client: TestClient):
+        resp = client.get("/api/v1/btc/exchanges/binance/status")
         assert resp.status_code == 200
         data = resp.json()
         assert data["connected"] is False

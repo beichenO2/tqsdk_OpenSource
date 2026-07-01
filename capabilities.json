@@ -3,6 +3,17 @@
   "version": "3.0",
   "capabilities": [
     {
+      "id": "tqsdk.gateway.broker",
+      "service_name": "tqsdk-gateway",
+      "description": "TqSdk 凭证隔离网关 — 唯一持有 TqSdk 明文凭证，对外 REST 行情/下单",
+      "transport": "http",
+      "endpoint": "/health",
+      "method": "GET",
+      "idempotent": true,
+      "side_effects": false,
+      "timeout_ms": 5000
+    },
+    {
       "id": "tqsdk.data.futures-collector",
       "service_name": "tqsdk-data-collector",
       "description": "国内期货数据采集 — TqSdk 订阅 29 品种 5min+daily K 线，存储为 Parquet",
@@ -78,7 +89,7 @@
     {
       "id": "tqsdk.trading.live",
       "service_name": "tqsdk-api",
-      "description": "实盘交易调度 — live 模式实盘下单，支持期货 TqSdk 与加密多交易所 (Binance/OKX/Weex)",
+      "description": "实盘交易调度 — live 模式实盘下单，支持期货 TqSdk（gateway）与 WEEX（PolarPrivate B-class sign）",
       "transport": "http",
       "endpoint": "/api/v1/live_trading",
       "method": "POST",

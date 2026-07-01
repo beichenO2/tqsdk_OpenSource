@@ -1,7 +1,6 @@
 """broker_crypto — BTC 交易所接入封装包。"""
 
 from .base import ExchangeAdapter
-from .binance import BinanceAdapter
 from .factory import create_adapter, register_adapter
 from .manager import BTCBrokerManager
 from .market_adapter import CryptoMarketAdapter
@@ -22,15 +21,12 @@ from .models import (
     TimeInForce,
     Trade,
 )
-from .okx import OKXAdapter
 from .weex import WEEXAdapter
 
 __all__ = [
     "ExchangeAdapter",
     "BTCBrokerManager",
-    "BinanceAdapter",
     "CryptoMarketAdapter",
-    "OKXAdapter",
     "WEEXAdapter",
     "create_adapter",
     "register_adapter",

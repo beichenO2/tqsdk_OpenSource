@@ -61,9 +61,17 @@ _INTERVAL_MAP: dict[str, str] = {
 class WEEXAdapter(ExchangeAdapter):
     """WEEX spot REST + WebSocket adapter (API V3)."""
 
-    def __init__(self, credentials: ExchangeCredentials) -> None:
+    def __init__(
+        self,
+        credentials: ExchangeCredentials,
+        *,
+        sign_client: object | None = None,
+        sign_binding: str | None = None,
+    ) -> None:
         super().__init__(credentials)
         self._session: aiohttp.ClientSession | None = None
+        self._sign_client = sign_client
+        self._sign_binding = sign_binding
 
     @property
     def exchange(self) -> Exchange:
@@ -86,6 +94,20 @@ class WEEXAdapter(ExchangeAdapter):
 
     def _headers(self, method: str, path: str,
                  query_string: str = "", body: str = "") -> dict[str, str]:
+        if self._sign_client is not None and self._sign_binding:
+            headers = self._sign_client.sign(
+                "weex",
+                "rest",
+                binding=self._sign_binding,
+                method=method.upper(),
+                path=path,
+                query=query_string,
+                body=body,
+            )
+            headers = dict(headers)
+            headers.setdefault("Content-Type", "application/json")
+            return headers
+
         ts = str(int(time.time() * 1000))
         sig = self._sign(ts, method, path, query_string, body)
         return {

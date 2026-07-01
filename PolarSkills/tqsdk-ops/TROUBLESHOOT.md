@@ -24,9 +24,9 @@ curl -s http://127.0.0.1:18900/health
 
 **修复**：`检查 TqSdk 连接状态和网络`
 
-### 2. Binance API 限流
+### 2. WEEX 签名失败
 
-**修复**：`降低请求频率或检查 API key 额度`
+**修复**：`确认 PolarPrivate 已解锁，且 Vault 中 exchange.weex 绑定已配置`
 
 ### 3. 回测数据缺失
 
@@ -34,8 +34,8 @@ curl -s http://127.0.0.1:18900/health
 
 ## 依赖服务
 
-- 天勤 TqSdk (期货行情)
-- Binance API (加密行情)
+- 天勤 TqSdk gateway（期货行情/下单）
+- PolarPrivate B-class sign（WEEX 加密实盘）
 
 ## 紧急恢复
 

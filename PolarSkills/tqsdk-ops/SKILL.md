@@ -9,7 +9,7 @@
 | 健康端点 | 端口 18900（/health） |
 | 启动命令 | `cd data-collector && python collector.py` |
 | 安装命令 | `cd data-collector && pip install -r requirements.txt` |
-| 技术栈 | Python, TqSdk (期货), Binance API (加密) |
+| 技术栈 | Python, TqSdk gateway (期货), WEEX via PolarPrivate (加密实盘) |
 
 ## 快速启动
 
@@ -27,5 +27,5 @@ curl -s http://127.0.0.1:18900/health
 
 ## 依赖服务
 
-- 天勤 TqSdk (期货行情)
-- Binance API (加密行情)
+- 天勤 TqSdk gateway（期货行情/下单）
+- PolarPrivate B-class sign（WEEX 加密实盘）

@@ -37,8 +37,7 @@ class BTCBrokerManager:
 
     使用方式：
         manager = BTCBrokerManager()
-        await manager.add_exchange(creds_binance)
-        await manager.add_exchange(creds_okx)
+        await manager.register_adapter(Exchange.WEEX, weex_adapter)
         order = await manager.place_order(request)
     """
 
@@ -71,6 +70,12 @@ class BTCBrokerManager:
         await adapter.connect()
         self._adapters[credentials.exchange] = adapter
         logger.info("已连接交易所: %s", credentials.exchange.value)
+
+    async def register_adapter(self, exchange: Exchange, adapter: ExchangeAdapter) -> None:
+        """Register a pre-built adapter (e.g. PolarPrivate B-class WEEX)."""
+        await adapter.connect()
+        self._adapters[exchange] = adapter
+        logger.info("已连接交易所: %s", exchange.value)
 
     async def remove_exchange(self, exchange: Exchange) -> None:
         adapter = self._adapters.pop(exchange, None)

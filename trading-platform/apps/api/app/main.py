@@ -38,6 +38,8 @@ _bootstrap_repo_import_paths()
 from core.exceptions import TradingPlatformError
 from core.logging_config import setup_logging
 from app.deps import set_btc_broker_manager, set_execution_service, set_market_adapter
+from app.services.polarprivate_bootstrap import init_btc_broker
+from app.services.tqsdk_bootstrap import init_tqsdk_runtime
 from app.routers import backtest, btc, crypto_data, deploy, health, live_trading, market, ml, orders, paper_trading, positions, strategies, ws
 
 try:
@@ -53,138 +55,21 @@ except (ImportError, ModuleNotFoundError):
 logger = logging.getLogger(__name__)
 
 
-def _get_privportal_client():
-    """Create a PolarPrivate client for credential retrieval."""
-    try:
-        from security.privportal import PrivPortalClient
-        client = PrivPortalClient(service_name="tqsdk-api")
-        client.ensure_session()
-        return client
-    except Exception:
-        logger.warning("PolarPrivate unavailable, falling back to env vars")
-        return None
-
-
-async def _init_btc_broker() -> object | None:
-    """Initialize BTCBrokerManager. Reads credentials from PolarPrivate (preferred)
-    or environment variables (fallback). Always registers Binance in public-only
-    mode for market data."""
-    import os
-    try:
-        from broker_crypto import BTCBrokerManager, ExchangeCredentials, Exchange
-
-        manager = BTCBrokerManager()
-        is_testnet = os.getenv("CRYPTO_TESTNET", "false").lower() == "true"
-
-        pp = _get_privportal_client()
-        authenticated = 0
-
-        _EXCHANGE_NAMES = {
-            Exchange.BINANCE: "binance",
-            Exchange.OKX: "okx",
-            Exchange.WEEX: "weex",
-        }
-
-        for exchange, name in _EXCHANGE_NAMES.items():
-            api_key = api_secret = passphrase = None
-            if pp:
-                try:
-                    keys = pp.get_exchange_keys(name)
-                    api_key = keys.api_key
-                    api_secret = keys.api_secret
-                    passphrase = keys.passphrase
-                    if keys.testnet:
-                        is_testnet = True
-                    logger.info("BTCBrokerManager: %s credentials from PolarPrivate", name)
-                except (KeyError, Exception) as exc:
-                    logger.debug("PolarPrivate: no %s credentials (%s)", name, exc)
-
-            if not api_key:
-                env_prefix = name.upper()
-                api_key = os.getenv(f"{env_prefix}_API_KEY")
-                api_secret = os.getenv(f"{env_prefix}_API_SECRET")
-                passphrase = os.getenv(f"{env_prefix}_PASSPHRASE")
-
-            if api_key and api_secret:
-                creds = ExchangeCredentials(
-                    exchange=exchange,
-                    api_key=api_key,
-                    api_secret=api_secret,
-                    passphrase=passphrase,
-                    testnet=is_testnet,
-                )
-                await manager.add_exchange(creds)
-                authenticated += 1
-
-        if pp:
-            pp.close()
-
-        if Exchange.BINANCE not in manager.exchanges:
-            public_creds = ExchangeCredentials(
-                exchange=Exchange.BINANCE,
-                api_key="",
-                api_secret="",
-                testnet=is_testnet,
-            )
-            await manager.add_exchange(public_creds)
-            logger.info("BTCBrokerManager: Binance connected (public market data only)")
-
-        if authenticated > 0:
-            logger.info("BTCBrokerManager: %d exchange(s) with trading credentials", authenticated)
-        else:
-            logger.info("BTCBrokerManager: public market data mode (no trading credentials)")
-
-        return manager
-    except Exception:
-        logger.warning("BTCBrokerManager init failed, BTC routes will return 503", exc_info=True)
-        return None
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging(level="INFO")
 
-    svc = None
-    broker_client = None
+    tqsdk_runtime = None
 
     try:
-        from broker_tqsdk.client import TqBrokerClient
-        from execution.tqsdk_adapter import TqSdkBrokerAdapter
-        from execution.service import ExecutionService
-        from app.services.market import create_market_adapter
-
-        tq_kwargs: dict[str, str] = {}
-        pp = _get_privportal_client()
-        if pp:
-            try:
-                from security.privportal import TqSdkKeys  # noqa: F401
-                keys = pp.get_tqsdk_keys()
-                tq_kwargs = {
-                    "auth_email": keys.auth_user,
-                    "auth_password": keys.auth_password,
-                    "broker_id": keys.broker,
-                    "account_id": keys.account,
-                }
-                logger.info("TqSdk credentials from PolarPrivate")
-            except (KeyError, Exception) as exc:
-                logger.warning("PolarPrivate: no TqSdk credentials (%s)", exc)
-            finally:
-                pp.close()
-
-        broker_client = TqBrokerClient(**tq_kwargs)
-        adapter = TqSdkBrokerAdapter(broker_client)
-        svc = ExecutionService(adapter)
-        market_adapter = create_market_adapter()
-
-        await svc.start()
-        market_adapter.set_api(broker_client.tqsdk_api)
-        set_execution_service(svc)
-        set_market_adapter(market_adapter)
+        tqsdk_runtime = await init_tqsdk_runtime()
+        set_execution_service(tqsdk_runtime.execution_service)
+        set_market_adapter(tqsdk_runtime.market_adapter)
         logger.info("TqTrader 启动完成")
     except Exception:
         logger.warning("TqSdk 初始化失败 — 研究模式启动（交易路由返回 503）", exc_info=True)
 
-    btc_manager = await _init_btc_broker()
+    btc_manager = await init_btc_broker()
     set_btc_broker_manager(btc_manager)
 
     try:
@@ -196,8 +81,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             except Exception:
                 logger.warning("BTCBrokerManager disconnect error", exc_info=True)
         set_btc_broker_manager(None)
-        if svc is not None:
-            await svc.stop()
+        if tqsdk_runtime is not None:
+            await tqsdk_runtime.broker_client.disconnect()
+            await tqsdk_runtime.market_adapter.aclose()
+            await tqsdk_runtime.execution_service.stop()
         set_market_adapter(None)
         logger.info("TqTrader 关闭")
 

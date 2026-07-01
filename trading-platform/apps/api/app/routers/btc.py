@@ -1,4 +1,4 @@
-"""BTC API 路由 — 通过 broker_crypto 适配器访问真实交易所
+"""BTC API 路由 — 通过 broker_crypto WEEX 适配器访问交易所
 
 端点前缀: /api/v1/btc/
 覆盖: 行情、交易、账户、策略、回测
@@ -62,7 +62,7 @@ def _require_adapter(exchange_str: str, manager):
 
 
 class PlaceOrderRequest(BaseModel):
-    exchange: str = Field(default="binance", description="交易所: binance / okx / weex")
+    exchange: str = Field(default="weex", description="交易所: weex")
     symbol: str = Field(default="BTCUSDT")
     side: str = Field(..., description="buy / sell")
     order_type: Optional[str] = Field(default=None, alias="type")
@@ -102,7 +102,7 @@ class BacktestRequest(BaseModel):
 
     strategy_name: str = Field(alias="strategyId", default="btc_momentum")
     symbol: str = "BTCUSDT"
-    exchange: str = "binance"
+    exchange: str = "weex"
     interval: str = "1h"
     start_date: str = Field(alias="startDate")
     end_date: str = Field(alias="endDate")
@@ -118,7 +118,7 @@ class BacktestRequest(BaseModel):
 @router.get("/market/ticker/{symbol}")
 async def get_ticker(
     symbol: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     manager=Depends(_require_manager),
 ) -> dict:
     adapter = _require_adapter(exchange, manager)
@@ -133,7 +133,7 @@ async def get_ticker(
 @router.get("/market/klines/{symbol}")
 async def get_klines(
     symbol: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     interval: Optional[str] = Query(default=None),
     timeframe: Optional[str] = Query(default=None),
     limit: int = Query(default=500, le=1500),
@@ -152,7 +152,7 @@ async def get_klines(
 @router.get("/market/orderbook/{symbol}")
 async def get_orderbook(
     symbol: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     depth: Optional[int] = Query(default=None, le=100),
     limit: Optional[int] = Query(default=None, le=100),
     manager=Depends(_require_manager),
@@ -170,7 +170,7 @@ async def get_orderbook(
 @router.get("/market/trades/{symbol}")
 async def get_recent_trades(
     symbol: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     limit: int = Query(default=50, le=500),
     manager=Depends(_require_manager),
 ) -> list:
@@ -223,7 +223,7 @@ async def place_order(
 @router.delete("/orders/{order_id}")
 async def cancel_order(
     order_id: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     symbol: str = Query(default="BTCUSDT"),
     manager=Depends(_require_manager),
 ) -> dict:
@@ -240,7 +240,7 @@ async def cancel_order(
 
 @router.get("/orders")
 async def get_orders(
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     symbol: Optional[str] = None,
     status: Optional[str] = None,
     manager=Depends(_require_manager),
@@ -262,7 +262,7 @@ async def get_orders(
 @router.get("/orders/{order_id}")
 async def get_order(
     order_id: str,
-    exchange: str = Query(default="binance"),
+    exchange: str = Query(default="weex"),
     symbol: str = Query(default="BTCUSDT"),
     manager=Depends(_require_manager),
 ) -> dict:
@@ -428,8 +428,6 @@ async def list_exchanges(
     manager=Depends(get_btc_broker_manager),
 ) -> dict:
     all_exchanges = [
-        {"id": "binance", "name": "Binance", "enum_value": "BINANCE"},
-        {"id": "okx", "name": "OKX", "enum_value": "OKX"},
         {"id": "weex", "name": "WEEX", "enum_value": "WEEX"},
     ]
     connected = {e.value for e in (manager.exchanges if manager else [])}

@@ -188,7 +188,10 @@ class PrivPortalClient:
         )
 
     def get_tqsdk_keys(self) -> TqSdkKeys:
-        """Retrieve TqSdk credentials via D-class controlled channel."""
+        """DEPRECATED for trading-platform — use TqSdk Gateway instead.
+
+        Only the gateway process (tqsdk-gateway/) should call grant_d_class().
+        """
         secrets = self.grant_d_class("tqsdk-login")
 
         def _get(key: str) -> str:
