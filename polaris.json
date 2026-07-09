@@ -2,7 +2,7 @@
   "name": "tqsdk",
   "_meta": {
     "schema_version": "1.0",
-    "last_synced_at": "2026-06-10T00:00:00+08:00"
+    "last_synced_at": "2026-07-09T12:52:25+08:00"
   },
   "description": "国内期货 + BTC 双市场量化交易平台",
   "tier": "domain",
@@ -451,6 +451,29 @@
       },
       "features": [
         {
+          "name": "TqSdk Gateway 凭证隔离",
+          "status": "done",
+          "tech": [
+            "FastAPI",
+            "PolarPrivate D-class"
+          ],
+          "interfaces": [
+            "tqsdk-gateway/",
+            "packages/broker_tqsdk/broker_tqsdk/gateway_client.py",
+            "packages/sim_live/live_feed.py (TqGatewayLiveFeed)"
+          ],
+          "behavior": [
+            "凭证明文仅存在于 gateway 进程（D-class grant），trading-platform 全程经 HTTP (12890)",
+            "data-collector 经 gateway 采集 K 线，无本地凭证",
+            "broker_crypto 移除 binance/okx，仅保留 WEEX（B-class sign）",
+            "privportal.get_tqsdk_keys 标记 DEPRECATED"
+          ],
+          "test_status": "not_tested",
+          "evidence": [
+            "2026-07-09: commit 52ddf0e + 56098c1，py_compile 全绿"
+          ]
+        },
+        {
           "name": "LiveScheduler 实盘通道",
           "status": "done",
           "tech": [
@@ -827,14 +850,18 @@
       "blockers": []
     },
     {
-      "id": "R5",
+      "id": "R9",
       "need": "网站与策略对接 — 全链路贯通",
       "approach": "策略 @auto_register → StrategyRegistry → API /backtest/strategy-names → 前端动态加载；回测结果 JSON → /backtest/results → StrategyDetail 页面；模拟盘 sim_live → /paper-trading API → PaperTrading 页面",
       "features": [
         {
           "name": "策略自动注册到前端",
           "status": "done",
-          "tech": ["Python", "FastAPI", "React"],
+          "tech": [
+            "Python",
+            "FastAPI",
+            "React"
+          ],
           "behavior": [
             "load_all_strategies() 加载 futures + btc + crypto.strategies",
             "crypto/strategies/__init__.py 显式导入 39 个策略触发 @auto_register",
@@ -845,7 +872,11 @@
         {
           "name": "回测结果与策略详情打通",
           "status": "done",
-          "tech": ["FastAPI", "React", "Recharts"],
+          "tech": [
+            "FastAPI",
+            "React",
+            "Recharts"
+          ],
           "behavior": [
             "GET /backtest/results 加载 models/backtest_*.json",
             "StrategyDetail 页面展示指标/雷达图/跨品种对比",
@@ -855,7 +886,9 @@
         {
           "name": "加密策略注册到 Registry",
           "status": "done",
-          "tech": ["Python"],
+          "tech": [
+            "Python"
+          ],
           "behavior": [
             "39 个加密策略通过 @auto_register 注册",
             "CryptoStrategyRegistry 提供 crypto-only 查询"
@@ -864,12 +897,139 @@
         {
           "name": "模拟盘执行链路",
           "status": "done",
-          "tech": ["Python", "FastAPI", "React"],
+          "tech": [
+            "Python",
+            "FastAPI",
+            "React"
+          ],
           "behavior": [
             "sim_live 包：engine + strategy_factory + paper_scheduler + realtime_feed",
             "execution 包：engine + broker_adapter + tqsdk_adapter + order_manager",
             "PaperTrading 页面：排行榜 + 账号详情 + 净值曲线 + 策略分类统计",
             "GET /paper-trading/catalog 展示 200 个 SOTA 策略"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "need": "策略/因子开发平台 — 因子一等公民 + 统一研究工作流",
+      "approach": "新增 packages/factor（IC/IR/去重/合成）+ 扩展 ResearchRun 为 8 步 pipeline（Idea→Factor→Validate→Model→Backtest→Gate→Deploy→Record）+ LLM 因子进化（bandit 调度），对标 Qlib / RD-Agent(Q) / vn.py alpha",
+      "tech": {
+        "Python": "3.13",
+        "FastAPI": "latest"
+      },
+      "features": [
+        {
+          "name": "因子子系统 packages/factor",
+          "status": "done",
+          "behavior": [
+            "桥接 packages/features 注册表（@factor）+ analysis/combine 模块",
+            "IC/RankIC/IR 分析 + IC 衰减 + 相关性≥0.99 去重",
+            "因子合成（等权/IC 加权/正交化）",
+            "GET/POST /factors + FactorsPage（库表/IC 曲线/衰减）",
+            "设计文档: trading-platform/docs/prd/web-v2-and-quant-platform.md §4"
+          ],
+          "test_status": "passed",
+          "interfaces": [
+            "packages/factor/",
+            "apps/api/app/routers/factors.py",
+            "apps/web/src/pages/FactorsPage.tsx"
+          ],
+          "evidence": [
+            "2026-07-09: pytest tests/unit/test_factor_analysis.py 3 passed; tsc --noEmit clean",
+            "2026-07-09: Alphalens CS IC + quantile; Alpha158/WQ101 subsets; futures_deepview skill; pytest test_alphalens_cs 3 passed (6 total)"
+          ]
+        },
+        {
+          "name": "统一研究工作流 8 步 pipeline",
+          "status": "done",
+          "behavior": [
+            "ResearchRun.derive_pipeline：Idea→Factor→Validate-F→Model→Backtest→Gate→Deploy→Record",
+            "GET /research/runs/{id}/pipeline + POST /promote（research→backtest→paper→live）",
+            "POST /factor-snapshot 推进因子步骤；live 晋升仅记录，不下单",
+            "ResearchRuns 页 PipelineStepper + Promote 按钮"
+          ],
+          "test_status": "passed",
+          "interfaces": [
+            "packages/experiment/research_run.py",
+            "apps/api/app/routers/research.py",
+            "apps/web/src/pages/ResearchRuns.tsx"
+          ],
+          "evidence": [
+            "2026-07-09: pytest test_research_pipeline.py 4 passed; WQ101≥20"
+          ]
+        },
+        {
+          "name": "LLM 因子进化",
+          "status": "done",
+          "behavior": [
+            "packages/factor/evolution.py：Thompson/ε-greedy bandit（factor_mining vs model_tune）",
+            "LLM 提案表达式（PolarPrivate）+ 404/不可用时模板变异降级",
+            "安全 AST 白名单求值 + IC/IR 评分 + |ρ|≥0.99 去重门控",
+            "POST /factors/evolve + FactorsPage「LLM 进化一轮」；产物 output/factor_evolution/"
+          ],
+          "test_status": "passed",
+          "interfaces": [
+            "packages/factor/evolution.py",
+            "apps/api/app/routers/factors.py",
+            "apps/web/src/pages/FactorsPage.tsx"
+          ],
+          "evidence": [
+            "2026-07-09: pytest test_factor_evolution.py"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "need": "Web v2 + 前端↔实盘贯通 — 为实盘做准备",
+      "approach": "四工作区 IA（研究/交易/监控/平台）+ ⌘K 命令面板 + RiskGate 下单前置 + 实盘二次确认 + 期货专项校验，paper 默认",
+      "tech": {
+        "React": "18",
+        "FastAPI": "latest"
+      },
+      "features": [
+        {
+          "name": "Web v2 信息架构",
+          "status": "done",
+          "behavior": [
+            "四工作区导航：研究/交易/监控/平台 + 二级页",
+            "⌘K CommandPalette 跳页搜索",
+            "双市场降级为顶栏上下文过滤 chips（非全局主开关）",
+            "旧路由 /strategies /backtest /live-trading 等 Redirect 兼容",
+            "ResearchRuns 挂到 /research；因子/优化/事件/健康等占位页"
+          ],
+          "test_status": "passed",
+          "interfaces": [
+            "apps/web/src/nav/workspaces.ts",
+            "apps/web/src/components/Layout.tsx",
+            "apps/web/src/components/CommandPalette.tsx",
+            "apps/web/src/App.tsx"
+          ],
+          "evidence": [
+            "2026-07-09: tsc --noEmit clean; Layout+App+CommandPalette landed"
+          ]
+        },
+        {
+          "name": "RiskGate 下单前置 + 实盘链路贯通",
+          "status": "done",
+          "behavior": [
+            "RiskGate 包装 RiskEngine：MaxOrderSize/Position/PriceBand/Frequency/Margin/DailyLoss + LimitUpDown/DeliveryMonth/TradingSession",
+            "LIVE_TRADING_ENABLED 环境闸 + X-Live-Confirm 二次确认（LIVE_CONFIRM_TOKEN）",
+            "POST /live-trading/order（经 RiskGate）+ /risk-probe + /risk-status",
+            "Live 页：手动下单 + 风控探测 + LIVE 锁定状态；paper 默认",
+            "RISK_SKIP_SESSION_CHECK 可跳过时段闸便于开发调试"
+          ],
+          "test_status": "passed",
+          "interfaces": [
+            "packages/risk/gate.py",
+            "packages/risk/futures_limits.py",
+            "apps/api/app/routers/live_trading.py",
+            "apps/web/src/pages/LiveTrading.tsx"
+          ],
+          "evidence": [
+            "2026-07-09: tests/unit/test_risk_gate.py + test_risk_engine.py 23 passed"
           ]
         }
       ]
@@ -919,8 +1079,8 @@
     "health_endpoint": "http://127.0.0.1:18900/health"
   },
   "contacts": {
-    "last_updated": "2026-05-25",
-    "updated_by": "solo-web-58ec894e",
-    "batch": "2026-05-25-ssot-sync"
+    "last_updated": "2026-07-09",
+    "updated_by": "solo-web-hw-1e7b2a8c",
+    "batch": "2026-07-09-web-v2-ia"
   }
 }

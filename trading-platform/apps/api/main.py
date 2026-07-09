@@ -8,14 +8,19 @@ from pathlib import Path
 
 def _bootstrap_repo_import_paths() -> None:
     repo_root = Path(__file__).resolve().parents[2]
+    # keep in sync with app/main.py:_bootstrap_repo_import_paths
     extra_paths = (
         repo_root,
         repo_root / "apps" / "api",
         repo_root / "packages" / "core",
         repo_root / "packages" / "backtest",
         repo_root / "packages" / "broker_tqsdk",
+        repo_root / "packages" / "broker_crypto" / "src",
         repo_root / "packages" / "risk",
+        repo_root / "packages" / "factor",
+        repo_root / "packages" / "features",
         repo_root / "packages" / "sim_live",
+        repo_root / "packages" / "security" / "src",
         repo_root / "packages",
     )
     for path in reversed(extra_paths):

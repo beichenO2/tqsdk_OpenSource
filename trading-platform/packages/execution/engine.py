@@ -37,8 +37,16 @@ class ExecutionEngine:
         await self._broker.connect()
         self._running = True
 
-        positions = await self._broker.query_positions()
-        self.position_manager.sync_from_broker(positions)
+        # 闭市/网关慢时持仓同步可能超时 — 降级启动，交给 reconcile 循环补偿
+        try:
+            positions = await self._broker.query_positions()
+            self.position_manager.sync_from_broker(positions)
+        except Exception as e:
+            logger.warning(
+                "Initial position sync failed (%s: %s) — starting with empty "
+                "positions; reconcile loop will retry",
+                type(e).__name__, e,
+            )
 
         self._reconcile_task = asyncio.create_task(self._reconcile_loop())
         logger.info("Execution engine started")

@@ -7,11 +7,23 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 PID_FILE="$SCRIPT_DIR/.pid"
 SERVICE_NAME="tqsdk-gateway"
 PROJECT="tqsdk"
-PREFERRED_PORT=12891
+PREFERRED_PORT=12890
 LOG_FILE="$SCRIPT_DIR/tqsdk-gateway.log"
 
-source "$PROJECT_DIR/../Agent_core/scripts/port-claim.sh"
-PORT=$(claim_port "$SERVICE_NAME" "$PROJECT" "$PREFERRED_PORT")
+# port-claim.sh lives in the Polarisor workspace root (one level above the
+# tqsdk repo); fall back to PREFERRED_PORT when unavailable.
+PORT_CLAIM=""
+for cand in "$PROJECT_DIR/../Agent_core/scripts/port-claim.sh" \
+            "$PROJECT_DIR/../../Agent_core/scripts/port-claim.sh"; do
+  if [ -f "$cand" ]; then PORT_CLAIM="$cand"; break; fi
+done
+if [ -n "$PORT_CLAIM" ]; then
+  source "$PORT_CLAIM"
+  PORT=$(claim_port "$SERVICE_NAME" "$PROJECT" "$PREFERRED_PORT")
+else
+  echo "port-claim.sh not found, using preferred port $PREFERRED_PORT" >&2
+  PORT=$PREFERRED_PORT
+fi
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
 
 cd "$PROJECT_DIR"
@@ -25,8 +37,13 @@ do_start() {
 
   export TQSDK_GATEWAY_HOST=127.0.0.1
   export TQSDK_GATEWAY_PORT="$PORT"
+  export TQSDK_DCLASS_SERVICE="${TQSDK_DCLASS_SERVICE:-tqsdk-login-huishang}"
 
-  nohup python3 main.py >> "$LOG_FILE" 2>&1 &
+  # D-class allowlist pins the caller executable hash — use a stable interpreter
+  PYTHON_BIN="${TQSDK_GATEWAY_PYTHON:-~/Polarisor/PolarPrivate/backend/.venv/bin/python3}"
+  [ -x "$PYTHON_BIN" ] || PYTHON_BIN=python3
+
+  nohup "$PYTHON_BIN" main.py >> "$LOG_FILE" 2>&1 &
   DAEMON_PID=$!
   echo "$DAEMON_PID" > "$PID_FILE"
 

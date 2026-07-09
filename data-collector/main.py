@@ -239,7 +239,7 @@ def run_collection_loop() -> None:
     from collector import CRYPTO_SYMBOLS, collect_crypto_klines, collect_futures_klines_via_gateway
     from tick_recorder import TickBuffer
 
-    gateway_url = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891").rstrip("/")
+    gateway_url = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890").rstrip("/")
 
     start_health_server()
     update_status(status="initializing")

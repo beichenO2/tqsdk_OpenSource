@@ -15,7 +15,7 @@ from core.models.position import Position
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")
+DEFAULT_GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890")
 
 
 class TqGatewayBrokerClient:

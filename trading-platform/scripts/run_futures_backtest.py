@@ -53,6 +53,16 @@ DEFAULT_STRATEGIES = [
     "kalman_trend", "har_volatility",
 ]
 
+# 单笔仓位占初始资金比例（additive PnL 模型使用固定名义仓位，避免乘法复利放大到 e+197）
+POSITION_NOTIONAL_PCT = 0.1
+# 单笔收益率 clamp 区间，防御单一 tick 毛刺导致 PnL 爆炸（与 validate_gate.py 对齐）
+PER_TRADE_RETURN_CAP = 10.0
+PER_TRADE_RETURN_FLOOR = -0.99
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
 
 def backtest_strategy_on_bars(
     strategy: BaseStrategy,
@@ -61,8 +71,17 @@ def backtest_strategy_on_bars(
     commission_rate: float = 0.00005,
     slippage_pct: float = 0.0001,
 ) -> dict:
-    """Run a strategy through historical bars and compute metrics."""
+    """Run a strategy through historical bars and compute metrics.
+
+    PnL 模型（修正 e+197 复利 bug）:
+      - 固定名义仓位 = initial_capital * POSITION_NOTIONAL_PCT
+      - 每笔交易 pnl_abs = notional * clamp(pnl_pct, -0.99, +10)
+      - 进出场手续费/滑点按名义仓位扣除
+      - capital 加法累加，不复利，上限 O(notional * n_trades)
+    """
     capital = initial_capital
+    notional = initial_capital * POSITION_NOTIONAL_PCT
+    cost_per_side = notional * (commission_rate + slippage_pct)
     position = None  # "long" or "short"
     entry_price = 0.0
     trades = []
@@ -86,27 +105,33 @@ def backtest_strategy_on_bars(
 
         for sig in signals:
             close_price = bar["close"]
+            if close_price <= 0:
+                continue
 
             if sig.signal_type == SignalType.LONG_ENTRY and position is None:
                 position = "long"
                 entry_price = close_price
-                capital *= (1 - commission_rate - slippage_pct)
+                capital -= cost_per_side
 
             elif sig.signal_type == SignalType.SHORT_ENTRY and position is None:
                 position = "short"
                 entry_price = close_price
-                capital *= (1 - commission_rate - slippage_pct)
+                capital -= cost_per_side
 
             elif sig.signal_type == SignalType.LONG_EXIT and position == "long":
-                pnl_pct = (close_price - entry_price) / entry_price
-                capital *= (1 + pnl_pct) * (1 - commission_rate - slippage_pct)
-                trades.append({"pnl_pct": pnl_pct, "side": "long"})
+                raw_pct = (close_price - entry_price) / entry_price if entry_price > 0 else 0.0
+                pnl_pct = _clamp(raw_pct, PER_TRADE_RETURN_FLOOR, PER_TRADE_RETURN_CAP)
+                pnl_abs = notional * pnl_pct
+                capital += pnl_abs - cost_per_side
+                trades.append({"pnl_pct": pnl_pct, "pnl_abs": pnl_abs, "side": "long"})
                 position = None
 
             elif sig.signal_type == SignalType.SHORT_EXIT and position == "short":
-                pnl_pct = (entry_price - close_price) / entry_price
-                capital *= (1 + pnl_pct) * (1 - commission_rate - slippage_pct)
-                trades.append({"pnl_pct": pnl_pct, "side": "short"})
+                raw_pct = (entry_price - close_price) / entry_price if entry_price > 0 else 0.0
+                pnl_pct = _clamp(raw_pct, PER_TRADE_RETURN_FLOOR, PER_TRADE_RETURN_CAP)
+                pnl_abs = notional * pnl_pct
+                capital += pnl_abs - cost_per_side
+                trades.append({"pnl_pct": pnl_pct, "pnl_abs": pnl_abs, "side": "short"})
                 position = None
 
         equity_curve.append(capital)
@@ -114,11 +139,13 @@ def backtest_strategy_on_bars(
     if position and len(bars) > 0:
         last_close = float(bars.iloc[-1]["close"])
         if position == "long":
-            pnl_pct = (last_close - entry_price) / entry_price
+            raw_pct = (last_close - entry_price) / entry_price if entry_price > 0 else 0.0
         else:
-            pnl_pct = (entry_price - last_close) / entry_price
-        capital *= (1 + pnl_pct) * (1 - commission_rate - slippage_pct)
-        trades.append({"pnl_pct": pnl_pct, "side": position})
+            raw_pct = (entry_price - last_close) / entry_price if entry_price > 0 else 0.0
+        pnl_pct = _clamp(raw_pct, PER_TRADE_RETURN_FLOOR, PER_TRADE_RETURN_CAP)
+        pnl_abs = notional * pnl_pct
+        capital += pnl_abs - cost_per_side
+        trades.append({"pnl_pct": pnl_pct, "pnl_abs": pnl_abs, "side": position})
 
     total_return = (capital - initial_capital) / initial_capital
     n_trades = len(trades)
@@ -126,23 +153,23 @@ def backtest_strategy_on_bars(
     losses = [t for t in trades if t["pnl_pct"] <= 0]
 
     win_rate = len(wins) / n_trades if n_trades > 0 else 0.0
-    avg_win = np.mean([t["pnl_pct"] for t in wins]) if wins else 0.0
-    avg_loss = np.mean([abs(t["pnl_pct"]) for t in losses]) if losses else 0.0
-    profit_factor = sum(t["pnl_pct"] for t in wins) / max(sum(abs(t["pnl_pct"]) for t in losses), 1e-10) if losses else (10.0 if wins else 0.0)
+    avg_win = float(np.mean([t["pnl_pct"] for t in wins])) if wins else 0.0
+    avg_loss = float(np.mean([abs(t["pnl_pct"]) for t in losses])) if losses else 0.0
+    gross_profit = float(sum(t["pnl_abs"] for t in wins)) if wins else 0.0
+    gross_loss = float(sum(abs(t["pnl_abs"]) for t in losses)) if losses else 0.0
+    profit_factor = gross_profit / max(gross_loss, 1e-10) if losses else (10.0 if wins else 0.0)
 
-    equity = np.array(equity_curve)
-    peak = np.maximum.accumulate(equity)
-    drawdown = (peak - equity) / peak
-    max_dd = float(np.max(drawdown))
+    equity = np.array(equity_curve, dtype=np.float64)
+    running_peak = np.maximum.accumulate(np.maximum(equity, initial_capital))
+    drawdown_abs = np.maximum(running_peak - equity, 0.0)
+    max_dd = float(np.max(drawdown_abs) / initial_capital) if initial_capital > 0 else 0.0
 
-    weekly_returns = []
+    # additive-PnL 的周期 sharpe：以初始资金为单位标准化，不依赖 equity[:-1] 除法
     step = max(1, len(equity) // 52)
-    for i in range(step, len(equity), step):
-        r = (equity[i] - equity[i - step]) / equity[i - step] if equity[i - step] > 0 else 0.0
-        weekly_returns.append(r)
-
-    if len(weekly_returns) >= 2:
-        sharpe = float(np.mean(weekly_returns) / max(np.std(weekly_returns), 1e-10) * np.sqrt(52))
+    equity_samples = equity[::step]
+    period_returns = np.diff(equity_samples) / initial_capital
+    if period_returns.size >= 2 and np.std(period_returns) > 1e-12:
+        sharpe = float(np.mean(period_returns) / np.std(period_returns) * np.sqrt(52))
     else:
         sharpe = 0.0
 

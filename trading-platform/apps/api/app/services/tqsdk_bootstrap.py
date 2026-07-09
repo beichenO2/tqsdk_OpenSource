@@ -29,7 +29,7 @@ async def init_tqsdk_runtime() -> TqSdkRuntime | None:
     from execution.service import ExecutionService
     from execution.tqsdk_adapter import TqSdkBrokerAdapter
 
-    gateway_url = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")
+    gateway_url = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890")
     broker_client = TqGatewayBrokerClient(base_url=gateway_url)
     adapter = TqSdkBrokerAdapter(broker_client)
     svc = ExecutionService(adapter)

@@ -1,13 +1,14 @@
-import clsx from 'clsx';
+import { Badge } from '@/components/shadcn/badge';
+import { cn } from '@/lib/utils';
 
 type Variant = 'success' | 'error' | 'warning' | 'info' | 'neutral';
 
-const variants: Record<Variant, string> = {
-  success: 'bg-profit/15 text-profit',
-  error: 'bg-loss/15 text-loss',
-  warning: 'bg-warning/15 text-warning',
-  info: 'bg-brand/15 text-brand-light',
-  neutral: 'bg-border text-text-secondary',
+const variantClass: Record<Variant, string> = {
+  success: 'border-profit/40 bg-profit/10 text-profit',
+  error: 'border-loss/40 bg-loss/10 text-loss',
+  warning: 'border-warning/40 bg-warning/10 text-warning',
+  info: 'border-primary/40 bg-primary/10 text-primary',
+  neutral: 'border-border bg-muted text-muted-foreground',
 };
 
 interface StatusBadgeProps {
@@ -16,26 +17,12 @@ interface StatusBadgeProps {
   pulse?: boolean;
 }
 
+/** Legacy-API wrapper over shadcn/ui Badge. */
 export default function StatusBadge({ variant, label, pulse }: StatusBadgeProps) {
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium',
-        variants[variant],
-      )}
-    >
-      {pulse && (
-        <span
-          className={clsx(
-            'w-1.5 h-1.5 rounded-full animate-pulse',
-            variant === 'success' && 'bg-profit',
-            variant === 'error' && 'bg-loss',
-            variant === 'warning' && 'bg-warning',
-            variant === 'info' && 'bg-brand-light',
-          )}
-        />
-      )}
+    <Badge variant="outline" className={cn('font-mono tabular-nums', variantClass[variant])}>
+      {pulse && <span className="size-1.5 rounded-full bg-current animate-pulse" />}
       {label}
-    </span>
+    </Badge>
   );
 }

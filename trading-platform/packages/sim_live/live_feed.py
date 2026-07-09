@@ -109,7 +109,7 @@ class TqGatewayLiveFeed:
         self.symbols = symbols
         self.interval = interval
         self._on_bar = on_bar
-        self._gateway_url = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")).rstrip("/")
+        self._gateway_url = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890")).rstrip("/")
         self._running = False
         self._last_ts: dict[str, int] = {}
 

@@ -81,6 +81,48 @@
       "type": "string",
       "enum": ["approved", "rejected", "pending"],
       "description": "Final decision based on validation gates"
+    },
+    "swarm_committee_review": {
+      "type": "object",
+      "description": "Output from swarm audit committee review (if run was reviewed by committee preset)",
+      "properties": {
+        "preset": {
+          "type": "string",
+          "description": "Which swarm preset was used (e.g. 'futures_strategy_research_committee')"
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["approve", "reject", "conditional"],
+          "description": "Aggregate committee verdict"
+        },
+        "votes": {
+          "type": "array",
+          "description": "Individual role votes",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": { "type": "string" },
+              "vote": { "type": "string", "enum": ["approve", "reject", "abstain"] },
+              "rationale": { "type": "string" },
+              "concerns": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["role", "vote"]
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "description": "Conditions for conditional approval",
+          "items": { "type": "string" }
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["preset", "verdict", "votes"]
     }
   }
 }

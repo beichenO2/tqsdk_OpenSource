@@ -11,15 +11,18 @@ export default defineConfig({
     },
   },
   server: {
+    // bind IPv4 explicitly — backend listens on 127.0.0.1 and the ws proxy
+    // breaks when vite resolves localhost to ::1
+    host: '127.0.0.1',
     port: 6130,
     strictPort: true,
     proxy: {
       '/api/v1': {
-        target: 'http://localhost:8000',
+        target: process.env.API_PROXY_TARGET || 'http://localhost:8000',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: (process.env.API_PROXY_TARGET || 'http://localhost:8000').replace('http', 'ws'),
         ws: true,
       },
     },

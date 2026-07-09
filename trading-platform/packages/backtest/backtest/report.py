@@ -18,6 +18,9 @@ from .models import (
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE = Decimal("0.03")
 
+SANITY_RETURN_CAP = Decimal("100")
+SANITY_SHARPE_CAP = Decimal("50")
+
 
 class ReportGenerator:
     """根据权益曲线和交易记录生成完整回测报告。"""
@@ -54,6 +57,7 @@ class ReportGenerator:
         self._calc_sortino(equity_curve, result)
         self._calc_trade_stats(trades, config, result)
         self._calc_calmar(result)
+        self._sanity_clamp(result)
 
         return result
 
@@ -158,6 +162,23 @@ class ReportGenerator:
             result.calmar_ratio = Decimal(
                 str(round(float(result.annual_return) / float(result.max_drawdown_pct), 4))
             )
+
+    @staticmethod
+    def _sanity_clamp(result: BacktestResult) -> None:
+        """Cap extreme values that indicate compounding bugs or data issues."""
+        if abs(result.total_return) > SANITY_RETURN_CAP:
+            logger.warning(
+                "Sanity: total_return=%s clamped to ±%s (strategy=%s)",
+                result.total_return, SANITY_RETURN_CAP, result.config.strategy_id,
+            )
+            sign = Decimal(1) if result.total_return > 0 else Decimal(-1)
+            result.total_return = sign * SANITY_RETURN_CAP
+        if abs(result.sharpe_ratio) > SANITY_SHARPE_CAP:
+            sign = Decimal(1) if result.sharpe_ratio > 0 else Decimal(-1)
+            result.sharpe_ratio = sign * SANITY_SHARPE_CAP
+        if abs(result.sortino_ratio) > SANITY_SHARPE_CAP:
+            sign = Decimal(1) if result.sortino_ratio > 0 else Decimal(-1)
+            result.sortino_ratio = sign * SANITY_SHARPE_CAP
 
     @staticmethod
     def _daily_returns(curve: list[EquityCurvePoint]) -> list[float]:

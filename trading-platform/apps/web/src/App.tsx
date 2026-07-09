@@ -1,11 +1,14 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui/Toast';
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Skeleton } from '@/components/ui/Skeleton';
 import Layout from '@/components/Layout';
+import DataPageReal from '@/pages/DataPage';
+import SkillsPageReal from '@/pages/SkillsPage';
+import FactorsPageReal from '@/pages/FactorsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,11 +29,11 @@ const Risk = lazy(() => import('@/pages/Risk'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const PaperTrading = lazy(() => import('@/pages/PaperTrading'));
 const StrategyDetail = lazy(() => import('@/pages/StrategyDetail'));
-const CryptoDashboard = lazy(() => import('@/pages/crypto/Dashboard'));
-const CryptoTrading = lazy(() => import('@/pages/crypto/Trading'));
-const CryptoBacktest = lazy(() => import('@/pages/crypto/Backtest'));
-const CryptoPortfolio = lazy(() => import('@/pages/crypto/Portfolio'));
 const LiveTrading = lazy(() => import('@/pages/LiveTrading'));
+const ResearchRuns = lazy(() => import('@/pages/ResearchRuns'));
+const EventsPage = lazy(() => import('@/pages/EventsPage'));
+const HealthPage = lazy(() => import('@/pages/HealthPage'));
+const OptimizerPageReal = lazy(() => import('@/pages/OptimizerPage'));
 
 function PageFallback() {
   return (
@@ -50,6 +53,14 @@ function PageFallback() {
   );
 }
 
+function Wrap({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -58,29 +69,45 @@ export default function App() {
           <BrowserRouter>
             <Routes>
               <Route element={<Layout />}>
-                <Route
-                  index
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<PageFallback />}>
-                        <Dashboard />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route path="trading" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><Trading /></Suspense></ErrorBoundary>} />
-                <Route path="strategies" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><Strategies /></Suspense></ErrorBoundary>} />
-                <Route path="backtest" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><Backtest /></Suspense></ErrorBoundary>} />
-                <Route path="backtest/compare" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><BacktestCompare /></Suspense></ErrorBoundary>} />
-                <Route path="risk" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><Risk /></Suspense></ErrorBoundary>} />
-                <Route path="strategy/:id" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><StrategyDetail /></Suspense></ErrorBoundary>} />
-                <Route path="settings" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><SettingsPage /></Suspense></ErrorBoundary>} />
-                <Route path="paper-trading" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><PaperTrading /></Suspense></ErrorBoundary>} />
-                <Route path="live-trading" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><LiveTrading /></Suspense></ErrorBoundary>} />
-                <Route path="crypto" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><CryptoDashboard /></Suspense></ErrorBoundary>} />
-                <Route path="crypto/trading" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><CryptoTrading /></Suspense></ErrorBoundary>} />
-                <Route path="crypto/backtest" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><CryptoBacktest /></Suspense></ErrorBoundary>} />
-                <Route path="crypto/portfolio" element={<ErrorBoundary><Suspense fallback={<PageFallback />}><CryptoPortfolio /></Suspense></ErrorBoundary>} />
+                <Route index element={<Wrap><Dashboard /></Wrap>} />
+
+                {/* Research workspace */}
+                <Route path="research" element={<Wrap><ResearchRuns /></Wrap>} />
+                <Route path="research/factors" element={<Wrap><FactorsPageReal /></Wrap>} />
+                <Route path="research/strategies" element={<Wrap><Strategies /></Wrap>} />
+                <Route path="research/backtest" element={<Wrap><Backtest /></Wrap>} />
+                <Route path="research/backtest/compare" element={<Wrap><BacktestCompare /></Wrap>} />
+                <Route path="research/optimizer" element={<Wrap><OptimizerPageReal /></Wrap>} />
+
+                {/* Trading workspace */}
+                <Route path="trading/paper" element={<Wrap><PaperTrading /></Wrap>} />
+                <Route path="trading/live" element={<Wrap><LiveTrading /></Wrap>} />
+                <Route path="trading/manual" element={<Wrap><Trading /></Wrap>} />
+
+                {/* Monitor workspace */}
+                <Route path="monitor/risk" element={<Wrap><Risk /></Wrap>} />
+                <Route path="monitor/events" element={<Wrap><EventsPage /></Wrap>} />
+                <Route path="monitor/health" element={<Wrap><HealthPage /></Wrap>} />
+
+                {/* Platform workspace */}
+                <Route path="platform/data" element={<Wrap><DataPageReal /></Wrap>} />
+                <Route path="platform/skills" element={<Wrap><SkillsPageReal /></Wrap>} />
+                <Route path="platform/settings" element={<Wrap><SettingsPage /></Wrap>} />
+
+                {/* Legacy redirects — keep old bookmarks working */}
+                <Route path="trading" element={<Navigate to="/trading/manual" replace />} />
+                <Route path="strategies" element={<Navigate to="/research/strategies" replace />} />
+                <Route path="backtest" element={<Navigate to="/research/backtest" replace />} />
+                <Route path="backtest/compare" element={<Navigate to="/research/backtest/compare" replace />} />
+                <Route path="risk" element={<Navigate to="/monitor/risk" replace />} />
+                <Route path="paper-trading" element={<Navigate to="/trading/paper" replace />} />
+                <Route path="live-trading" element={<Navigate to="/trading/live" replace />} />
+                <Route path="settings" element={<Navigate to="/platform/settings" replace />} />
+                <Route path="strategy/:id" element={<Wrap><StrategyDetail /></Wrap>} />
+
+                {/* Crypto legacy paths → trading workspace */}
+                <Route path="crypto" element={<Navigate to="/trading/paper" replace />} />
+                <Route path="crypto/*" element={<Navigate to="/trading/paper" replace />} />
               </Route>
             </Routes>
           </BrowserRouter>

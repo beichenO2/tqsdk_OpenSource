@@ -11,8 +11,33 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+class SessionBusyError(RuntimeError):
+    """Raised when the TqApi lock cannot be acquired in time (closed market)."""
+
+
+class _TimedLock:
+    """RLock guard with acquire timeout — prevents thread-pool starvation
+    when a TqSdk call blocks forever during closed market."""
+
+    def __init__(self, lock: threading.RLock, timeout: float) -> None:
+        self._lock = lock
+        self._timeout = timeout
+
+    def __enter__(self):
+        if not self._lock.acquire(timeout=self._timeout):
+            raise SessionBusyError(
+                f"TqSdk session busy (lock not acquired in {self._timeout}s; market closed?)"
+            )
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._lock.release()
+
+
 class TqSdkSession:
     """Thread-safe wrapper around one TqApi instance."""
+
+    LOCK_TIMEOUT_S = 5.0
 
     def __init__(self) -> None:
         self._api: Any = None
@@ -21,6 +46,9 @@ class TqSdkSession:
         self._thread: threading.Thread | None = None
         self._connected = False
         self._account_mode = "unknown"
+
+    def _locked(self) -> _TimedLock:
+        return _TimedLock(self._lock, self.LOCK_TIMEOUT_S)
 
     @property
     def connected(self) -> bool:
@@ -71,17 +99,22 @@ class TqSdkSession:
         logger.info("TqSdk session disconnected")
 
     def _update_loop(self) -> None:
+        """Drive TqSdk updates without holding the API lock.
+
+        Holding ``_lock`` across ``wait_update`` starves HTTP handlers during
+        both closed and open sessions (real TqSdk can exceed the deadline).
+        """
         while self._running and self._api is not None:
             try:
-                with self._lock:
-                    if self._api is not None:
-                        self._api.wait_update(deadline=time.time() + 1)
+                api = self._api
+                if api is not None:
+                    api.wait_update(deadline=time.time() + 1)
             except Exception:
                 if self._running:
                     time.sleep(0.5)
 
     def get_account_info(self) -> dict[str, float]:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             acc = self._api.get_account()
@@ -94,7 +127,7 @@ class TqSdkSession:
             }
 
     def get_positions(self) -> list[dict[str, Any]]:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             result: list[dict[str, Any]] = []
@@ -126,7 +159,7 @@ class TqSdkSession:
         price: float,
         volume: int,
     ) -> str:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             order = self._api.insert_order(
@@ -139,25 +172,31 @@ class TqSdkSession:
             return str(order.order_id)
 
     def cancel_order(self, order_id: str) -> bool:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 return False
             self._api.cancel_order(order_id)
             return True
 
     def get_quote(self, symbol: str) -> dict[str, Any]:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             q = self._api.get_quote(symbol)
+            raw_dt = q.datetime
+            dt_val: int | None
+            try:
+                dt_val = int(raw_dt) if raw_dt not in (None, "", "NaN") else None
+            except (TypeError, ValueError):
+                dt_val = None
             return {
                 "symbol": symbol,
-                "datetime": int(q.datetime),
-                "last_price": float(q.last_price),
-                "highest": float(q.highest),
-                "lowest": float(q.lowest),
-                "volume": int(q.volume),
-                "amount": float(q.amount),
+                "datetime": dt_val,
+                "last_price": float(q.last_price) if q.last_price == q.last_price else 0.0,
+                "highest": float(q.highest) if q.highest == q.highest else 0.0,
+                "lowest": float(q.lowest) if q.lowest == q.lowest else 0.0,
+                "volume": int(q.volume) if q.volume else 0,
+                "amount": float(q.amount) if q.amount == q.amount else 0.0,
                 "open_interest": int(q.open_interest) if q.open_interest else 0,
                 "bid_price1": float(q.bid_price1) if q.bid_price1 else None,
                 "bid_volume1": int(q.bid_volume1) if q.bid_volume1 else None,
@@ -166,7 +205,7 @@ class TqSdkSession:
             }
 
     def get_klines(self, symbol: str, duration: int, length: int) -> list[dict[str, Any]]:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             klines = self._api.get_kline_serial(symbol, duration, length)
@@ -184,7 +223,7 @@ class TqSdkSession:
             return rows
 
     def list_instruments(self, exchange_id: str | None = None, ins_class: str = "FUTURE") -> list[str]:
-        with self._lock:
+        with self._locked():
             if self._api is None:
                 raise RuntimeError("TqSdk not connected")
             kwargs: dict[str, Any] = {"ins_class": ins_class}

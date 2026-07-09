@@ -61,4 +61,21 @@ def create_all_strategies(market: str | None = None) -> dict[int, BaseStrategy]:
         for f in failed[:10]:
             logger.warning("  - %s", f)
 
+    if not strategies and catalog:
+        from .observer_strategy import ObserverStrategy
+
+        logger.warning(
+            "All %d catalog strategies failed — deploying ObserverStrategy fallbacks "
+            "to keep paper engine running",
+            len(catalog),
+        )
+        for entry in catalog:
+            aid = entry["account_id"]
+            config = StrategyConfig(
+                strategy_id=f"obs_{aid:03d}",
+                name=f"Observer-{entry['name']}",
+                symbols=entry["symbols"],
+            )
+            strategies[aid] = ObserverStrategy(config)
+
     return strategies

@@ -1,0 +1,91 @@
+name: futures_deepview
+description: >
+  期货深度复盘 Skill（QuantSkills futures-deepview-analyst 风格）—
+  席位/资金流/基差/期限结构口径核对后，输出可决策的结构化结论。
+category: research
+source_inspiration:
+  - "Bilibili QuantSkills: futures-deepview-analyst"
+  - "PandaData 数据口径分离：事实 vs 推断"
+
+interface:
+  input:
+    - name: symbol
+      type: string
+      description: 品种代码（如 rb / IF / sc）
+    - name: as_of
+      type: string
+      optional: true
+      description: 复盘交易日 YYYY-MM-DD（默认最近交易日）
+    - name: lookback_days
+      type: int
+      default: 20
+    - name: include_basis
+      type: bool
+      default: true
+    - name: include_term_structure
+      type: bool
+      default: true
+
+  output:
+    - name: facts
+      type: dict
+      description: 客观事实块（价格/持仓/基差/期限结构原始数）
+    - name: inferences
+      type: dict
+      description: 分析推断（与 facts 严格分离）
+    - name: decision
+      type: dict
+      description: "强制决策：bias(long/short/neutral) + conviction(0-1) + invalidation"
+    - name: data_quality
+      type: dict
+      description: 数据缺口与口径标注
+
+tqsdk_bindings:
+  - packages/factor/                 # 因子截面 IC / 分位
+  - packages/features/alpha_sets.py  # Alpha158/WQ101
+  - data-collector/                  # 行情采集
+  - tqsdk-gateway/                   # 实盘/行情网关
+  - apps/api/app/routers/platform.py # 缓存覆盖
+  - apps/api/app/routers/factors.py  # 因子计算
+
+steps:
+  1_resolve_calendar:
+    description: 核对交易日与夜盘时段，标注数据 as_of
+    outputs: [trading_day, session_flags]
+
+  2_collect_facts:
+    description: >
+      拉取客观事实：主力合约价量、近远月价差、持仓变化、
+      （若有）会员持仓排名/资金流；禁止在此步写观点
+    outputs: [facts]
+
+  3_factor_snapshot:
+    description: 计算 Alpha158/WQ 子集 + 截面 IC 摘要（多品种）
+    outputs: [factor_snapshot, cs_ic_summary]
+
+  4_separate_inference:
+    description: 基于 facts 做推断，显式标注假设与不确定性
+    outputs: [inferences]
+
+  5_force_decision:
+    description: >
+      强制输出 bias / conviction / invalidation / next_check；
+      禁止模棱两可（对齐 ai-berkshire 通过/不通过/灰区结构）
+    outputs: [decision]
+
+  6_quality_gate:
+    description: 数据缺口、过期缓存、缺失席位时降级 decision.conviction
+    outputs: [data_quality]
+
+decision_schema:
+  bias: [long, short, neutral]
+  conviction: "0.0-1.0"
+  invalidation: string
+  next_check: string
+  gray_zone: bool
+
+futures_specific:
+  - 主力合约切换日需重对齐因子面板
+  - 夜盘与日盘分段标注，避免跨段伪相关
+  - 交割月临近时降低趋势类因子权重
+  - 涨跌停日 IC/分位收益剔除或单独标注

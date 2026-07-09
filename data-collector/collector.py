@@ -117,7 +117,7 @@ def collect_futures_klines_via_gateway(
         logger.error("pandas not installed, skipping futures kline collection")
         return 0
 
-    base = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")).rstrip("/")
+    base = (gateway_url or os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890")).rstrip("/")
     symbols = symbols or FUTURES_SYMBOLS
     FUTURES_CACHE.mkdir(parents=True, exist_ok=True)
     collected = 0

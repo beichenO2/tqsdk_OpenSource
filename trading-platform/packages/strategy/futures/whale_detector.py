@@ -106,6 +106,7 @@ import numpy as np
 
 from ..base import BaseStrategy, Signal, SignalType, StrategyConfig
 from ..indicators import calc_atr, rolling_zscore, ema_update
+from ..mixins import EMASlopeRegimeMixin, SignalBalanceMixin
 from ..registry import auto_register
 
 logger = logging.getLogger(__name__)
@@ -182,7 +183,7 @@ class WhaleFeatureRow:
 
 
 @auto_register("whale_detector")
-class WhaleDetectorStrategy(BaseStrategy):
+class WhaleDetectorStrategy(SignalBalanceMixin, EMASlopeRegimeMixin, BaseStrategy):
     """庄家识别跟庄策略。
 
     通过 OI/Volume/Price 多维异常检测识别庄家行为阶段，支持：
@@ -235,6 +236,7 @@ class WhaleDetectorStrategy(BaseStrategy):
         self._volumes.append(v)
         self._ois.append(oi)
         self._bar_count += 1
+        self._regime_update(c)
 
         if self._bar_count > 1:
             self._oi_deltas.append(oi - self._ois[-2])
@@ -319,6 +321,13 @@ class WhaleDetectorStrategy(BaseStrategy):
                 if entry:
                     side, strength, reason = entry
                     sig_type = SignalType.LONG_ENTRY if side == "buy" else SignalType.SHORT_ENTRY
+                    # 逆势 / 单边饱和时压制入场（防 supertrend-35SHORT/0LONG 式偏差）
+                    if not (self._regime_allow(sig_type) and self._sb_allow(sig_type)):
+                        entry = None
+                if entry:
+                    side, strength, reason = entry
+                    sig_type = SignalType.LONG_ENTRY if side == "buy" else SignalType.SHORT_ENTRY
+                    self._sb_record(sig_type)
                     signals.append(Signal(
                         strategy_id=self.strategy_id,
                         symbol=symbol,

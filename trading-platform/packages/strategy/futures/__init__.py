@@ -9,6 +9,9 @@ from . import news_sentiment as _news_sentiment  # noqa: F401 — @auto_register
 from . import orderflow_imbalance as _orderflow_imbalance  # noqa: F401 — @auto_register
 from . import cross_momentum as _cross_momentum  # noqa: F401 — @auto_register
 from . import intraday_reversal as _intraday_reversal  # noqa: F401 — @auto_register
+from . import intraday_reversal_v2_a as _intraday_reversal_v2_a  # noqa: F401 — @auto_register (hybrid A)
+from . import intraday_reversal_v2_b as _intraday_reversal_v2_b  # noqa: F401 — @auto_register (hybrid B)
+from . import intraday_reversal_v2_c as _intraday_reversal_v2_c  # noqa: F401 — @auto_register (hybrid C)
 from . import kalman_trend as _kalman_trend  # noqa: F401 — @auto_register
 from . import har_volatility as _har_volatility  # noqa: F401 — @auto_register
 from . import ensemble_futures as _ensemble_futures  # noqa: F401 — @auto_register

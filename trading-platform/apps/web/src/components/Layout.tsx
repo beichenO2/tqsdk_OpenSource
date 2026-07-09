@@ -1,22 +1,51 @@
-import { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, TrendingUp, Bot, FlaskConical,
-  ShieldAlert, Settings, Trophy, Activity, Radio,
-  Moon, Sun,
+  FlaskConical, TrendingUp, ShieldAlert, Settings2,
+  Moon, Sun, Search, Gauge, ChevronRight, Zap,
 } from 'lucide-react';
-import { cn } from '@/lib/cn';
+import { useQuery } from '@tanstack/react-query';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from '@/components/shadcn/sidebar';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/shadcn/breadcrumb';
+import { Separator } from '@/components/shadcn/separator';
+import { Badge } from '@/components/shadcn/badge';
+import { Button } from '@/components/shadcn/button';
+import { cn } from '@/lib/utils';
 import { useMarketStore, type Market } from '@/stores/marketStore';
+import { WORKSPACES, workspaceForPath, type WorkspaceId } from '@/nav/workspaces';
+import { CommandPalette } from '@/components/CommandPalette';
+import { api } from '@/services/api';
 
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: '仪表盘' },
-  { to: '/trading', icon: TrendingUp, label: '交易' },
-  { to: '/strategies', icon: Bot, label: '策略' },
-  { to: '/backtest', icon: FlaskConical, label: '回测' },
-  { to: '/risk', icon: ShieldAlert, label: '风控' },
-  { to: '/paper-trading', icon: Trophy, label: '模拟实盘' },
-  { to: '/live-trading', icon: Radio, label: '实盘交易' },
-];
+const WS_ICONS: Record<WorkspaceId, typeof FlaskConical> = {
+  research: FlaskConical,
+  trading: TrendingUp,
+  monitor: ShieldAlert,
+  platform: Settings2,
+};
 
 const marketOptions: { value: Market; label: string }[] = [
   { value: 'all', label: '全部' },
@@ -24,144 +53,245 @@ const marketOptions: { value: Market; label: string }[] = [
   { value: 'crypto', label: '加密' },
 ];
 
-export default function Layout() {
-  const [hovered, setHovered] = useState(false);
-  const [dark, setDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark' ||
-        (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    }
-    return false;
+function useSystemHealth() {
+  return useQuery({
+    queryKey: ['system-health-shell'],
+    queryFn: () => api.getSystemHealth(),
+    refetchInterval: 15_000,
+    retry: 1,
   });
+}
+
+function AppSidebar() {
+  const location = useLocation();
+  const { data: health } = useSystemHealth();
+  const components = (health?.components || {}) as Record<string, { ok?: boolean }>;
+  const gwOk = !!components.tqsdk_gateway?.ok;
+  const liveEnabled = !!(health as { live_enabled?: boolean } | undefined)?.live_enabled;
+
+  return (
+    <Sidebar collapsible="icon" variant="inset">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link to="/">
+                <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Zap className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left leading-tight">
+                  <span className="truncate font-semibold">PolarTrade</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    tqsdk quant desk
+                  </span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>总览</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.pathname === '/'}
+                  tooltip="仪表盘"
+                >
+                  <NavLink to="/">
+                    <Gauge />
+                    <span>仪表盘</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>工作区</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {WORKSPACES.map((ws) => {
+                const Icon = WS_ICONS[ws.id];
+                const active = workspaceForPath(location.pathname) === ws.id
+                  && location.pathname !== '/';
+                return (
+                  <SidebarMenuItem key={ws.id}>
+                    <SidebarMenuButton asChild isActive={active} tooltip={ws.label}>
+                      <NavLink to={ws.to}>
+                        <Icon />
+                        <span>{ws.label}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                    {active && (
+                      <SidebarMenuSub>
+                        {ws.pages.map((page) => {
+                          const isPrefix = ws.pages.some(
+                            (p) => p.to !== page.to && p.to.startsWith(`${page.to}/`),
+                          );
+                          const pageActive = isPrefix || page.to === ws.to
+                            ? location.pathname === page.to
+                            : location.pathname.startsWith(page.to);
+                          return (
+                            <SidebarMenuSubItem key={page.to}>
+                              <SidebarMenuSubButton asChild isActive={pageActive}>
+                                <NavLink to={page.to}>
+                                  <span>{page.label}</span>
+                                </NavLink>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <div className="flex items-center gap-2 px-2 py-1 group-data-[collapsible=icon]:justify-center">
+          <span className={cn('led', gwOk ? 'text-profit bg-profit' : 'text-loss bg-loss')} />
+          <span className="text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+            Gateway {gwOk ? '在线' : '离线'}
+          </span>
+          <Badge
+            variant="outline"
+            className={cn(
+              'ml-auto font-mono text-[10px] group-data-[collapsible=icon]:hidden',
+              liveEnabled ? 'border-loss/50 text-loss' : 'border-border text-muted-foreground',
+            )}
+          >
+            {liveEnabled ? 'LIVE' : 'PAPER'}
+          </Badge>
+        </div>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  );
+}
+
+function findBreadcrumb(pathname: string): { ws?: string; page?: string } {
+  if (pathname === '/') return { page: '仪表盘' };
+  for (const ws of WORKSPACES) {
+    for (const page of [...ws.pages].sort((a, b) => b.to.length - a.to.length)) {
+      if (pathname.startsWith(page.to)) return { ws: ws.label, page: page.label };
+    }
+  }
+  return {};
+}
+
+export default function Layout() {
+  const location = useLocation();
+  const crumb = findBreadcrumb(location.pathname);
+
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [light, setLight] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem('theme') === 'light' : false,
+  );
   const market = useMarketStore((s) => s.market);
   const setMarket = useMarketStore((s) => s.setMarket);
 
-  const toggleDark = () => {
-    const next = !dark;
-    setDark(next);
-    document.documentElement.classList.toggle('dark', next);
-    localStorage.setItem('theme', next ? 'dark' : 'light');
+  const toggleTheme = () => {
+    const next = !light;
+    setLight(next);
+    localStorage.setItem('theme', next ? 'light' : 'dark');
   };
 
-  useState(() => {
-    document.documentElement.classList.toggle('dark', dark);
-  });
+  useEffect(() => {
+    document.documentElement.classList.toggle('light', light);
+    document.documentElement.classList.toggle('dark', !light);
+  }, [light]);
 
-  const expanded = hovered;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
-    <div className="flex h-screen">
-      <aside
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        className={cn(
-          'fixed top-0 left-0 h-screen z-40 flex shrink-0 flex-col bg-surface-secondary border-r border-border overflow-hidden transition-all duration-300 ease-out',
-          expanded ? 'w-[14rem]' : 'w-[4rem]',
-        )}
-      >
-        {/* Logo */}
-        <div className="flex items-center px-4 h-[4rem] border-b border-border shrink-0">
-          <span className={cn(
-            'font-bold text-brand whitespace-nowrap overflow-hidden transition-all duration-300',
-            expanded ? 'text-lg' : 'text-xl w-8 text-center',
-          )}>
-            {expanded ? 'PolarTrade' : 'P'}
-          </span>
-        </div>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-1 !h-4" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              {crumb.ws && (
+                <>
+                  <BreadcrumbItem className="hidden md:block">
+                    <span className="text-muted-foreground">{crumb.ws}</span>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator className="hidden md:block">
+                    <ChevronRight className="size-3.5" />
+                  </BreadcrumbSeparator>
+                </>
+              )}
+              <BreadcrumbItem>
+                <BreadcrumbPage>{crumb.page || '—'}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
 
-        {/* Market switcher */}
-        <div className="px-3 py-4 border-b border-border">
-          {expanded ? (
-            <div className="flex rounded-xl bg-surface-tertiary p-1 gap-0.5">
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              className="flex rounded-lg border bg-muted/40 p-0.5"
+              title="页面上下文市场过滤"
+            >
               {marketOptions.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setMarket(opt.value)}
                   className={cn(
-                    'flex-1 rounded-lg px-3 py-2 text-[13px] font-medium transition-all',
+                    'rounded-md px-2.5 py-1 text-xs transition-colors',
                     market === opt.value
-                      ? 'bg-white text-brand shadow-sm'
-                      : 'text-text-muted hover:text-text-secondary',
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-          ) : (
-            <div className="flex items-center justify-center py-1">
-              <span className="text-[11px] font-semibold text-brand">
-                {market === 'all' ? 'A' : market === 'futures' ? '期' : '币'}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex flex-1 flex-col gap-1 px-3 py-4 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center rounded-xl transition-all duration-200 whitespace-nowrap min-h-[44px]',
-                  expanded ? 'gap-3 px-4 py-3' : 'justify-center px-0 py-3',
-                  isActive
-                    ? 'bg-brand/8 text-brand font-medium'
-                    : 'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary',
-                )
-              }
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden md:flex text-muted-foreground"
+              onClick={() => setCmdOpen(true)}
             >
-              <Icon className="h-5 w-5 shrink-0" />
-              {expanded && <span className="text-[15px]">{label}</span>}
-            </NavLink>
-          ))}
-        </nav>
-
-        {/* Status + Settings */}
-        <div className="border-t border-border px-3 py-4 space-y-1">
-          <div className={cn('flex items-center rounded-xl px-4 py-2', expanded ? 'gap-2.5' : 'justify-center')}>
-            <Activity className="h-4 w-4 text-profit shrink-0" />
-            {expanded && <span className="text-[13px] text-text-muted">在线</span>}
+              <Search className="size-3.5" />
+              搜索
+              <kbd className="pointer-events-none ml-1 inline-flex h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
+                ⌘K
+              </kbd>
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={toggleTheme} title="切换主题">
+              {light ? <Moon className="size-4" /> : <Sun className="size-4" />}
+            </Button>
           </div>
-          <button
-            onClick={toggleDark}
-            className={cn(
-              'flex items-center rounded-xl transition-all duration-200 whitespace-nowrap min-h-[44px] w-full',
-              expanded ? 'gap-3 px-4 py-3' : 'justify-center px-0 py-3',
-              'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary',
-            )}
-          >
-            {dark ? <Sun className="h-5 w-5 shrink-0" /> : <Moon className="h-5 w-5 shrink-0" />}
-            {expanded && <span className="text-[15px]">{dark ? '浅色' : '深色'}</span>}
-          </button>
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              cn(
-                'flex items-center rounded-xl transition-all duration-200 whitespace-nowrap min-h-[44px]',
-                expanded ? 'gap-3 px-4 py-3' : 'justify-center px-0 py-3',
-                isActive
-                  ? 'bg-brand/8 text-brand font-medium'
-                  : 'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary',
-              )
-            }
-          >
-            <Settings className="h-5 w-5 shrink-0" />
-            {expanded && <span className="text-[15px]">设置</span>}
-          </NavLink>
-        </div>
-      </aside>
+        </header>
 
-      <main className={cn(
-        'flex-1 overflow-y-auto bg-surface-950 transition-[margin-left] duration-300 ease-out min-h-screen',
-        'ml-[4rem]',
-      )}>
-        <Outlet />
-      </main>
-    </div>
+        <main className="flex-1 overflow-y-auto min-h-0">
+          <Outlet />
+        </main>
+      </SidebarInset>
+
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+    </SidebarProvider>
   );
 }

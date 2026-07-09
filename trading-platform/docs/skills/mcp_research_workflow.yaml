@@ -1,0 +1,103 @@
+name: mcp_research_workflow
+description: MCP 研究工作流技能 — 通过 MCP 工具驱动完整的策略研究循环
+category: research
+
+interface:
+  input:
+    - name: user_prompt
+      type: string
+      description: 用户研究意图（自然语言）
+    - name: strategy_name
+      type: string
+      optional: true
+    - name: symbols
+      type: list[string]
+      default: ["rb", "au"]
+    - name: timeframe
+      type: string
+      default: "5m"
+
+  output:
+    - name: run_id
+      type: string
+    - name: status
+      type: string
+      enum: [completed, failed, running]
+    - name: metrics
+      type: dict
+    - name: validation_gates
+      type: list[GateResult]
+    - name: artifact
+      type: ResearchArtifact
+
+mcp_tools_used:
+  - list_strategies    # 发现可用策略
+  - run_backtest       # 启动回测
+  - get_run_status     # 轮询结果
+  - get_metrics        # 读取历史指标
+
+tqsdk_bindings:
+  - apps/api/app/routers/mcp.py          # MCP 工具路由
+  - apps/api/app/routers/research.py     # 研究 API + SSE
+  - packages/research/mcp_tools.py       # 工具定义
+  - packages/experiment/research_run.py  # 核心 run 管理
+  - contracts/research_artifact.schema.json  # artifact schema
+
+steps:
+  1_discover:
+    description: 发现可用策略，匹配用户意图
+    tool: list_strategies
+    inputs: [user_prompt]
+    outputs: [candidate_strategies]
+
+  2_select:
+    description: 选择最匹配的策略或生成新策略代码
+    inputs: [candidate_strategies, user_prompt]
+    outputs: [strategy_name, params]
+    uses_skill: strategy_generation  # 如果没有匹配的现有策略
+
+  3_backtest:
+    description: 启动回测并通过 SSE 监听进度
+    tool: run_backtest
+    inputs: [strategy_name, symbols, timeframe, params]
+    outputs: [run_id]
+    sse_endpoint: /api/v1/research/runs/{run_id}/events
+
+  4_poll:
+    description: 等待回测完成，收集结果
+    tool: get_run_status
+    inputs: [run_id]
+    outputs: [status, metrics, validation_gates, diagnostics]
+    retry: { max: 30, interval_s: 10 }
+
+  5_diagnose:
+    description: 如果失败或指标不达标，运行诊断
+    uses_skill: backtest_diagnosis
+    condition: status == "failed" or metrics.avg_sharpe < 0.5
+    inputs: [run_id, metrics]
+    outputs: [diagnostics, fix_suggestions]
+
+  6_compare:
+    description: 与历史指标对比
+    tool: get_metrics
+    inputs: [strategy_name]
+    outputs: [historical_comparison]
+
+  7_export:
+    description: 导出研究 artifact
+    endpoint: GET /api/v1/research/runs/{run_id}/artifact
+    outputs: [artifact]
+    schema: contracts/research_artifact.schema.json
+
+workflow_patterns:
+  full_cycle:
+    steps: [1_discover, 2_select, 3_backtest, 4_poll, 5_diagnose, 6_compare, 7_export]
+    description: 完整研究循环（从意图到 artifact）
+
+  quick_backtest:
+    steps: [3_backtest, 4_poll, 6_compare]
+    description: 快速回测已知策略
+
+  diagnostic_only:
+    steps: [4_poll, 5_diagnose]
+    description: 仅诊断已有 run

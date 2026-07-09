@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
-import clsx from 'clsx';
+import {
+  Card as ShadCard,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardAction,
+} from '@/components/shadcn/card';
+import { cn } from '@/lib/utils';
 
 interface CardProps {
   title?: string;
@@ -9,16 +16,17 @@ interface CardProps {
   noPadding?: boolean;
 }
 
+/** Legacy-API wrapper over shadcn/ui Card. */
 export default function Card({ title, extra, children, className, noPadding }: CardProps) {
   return (
-    <div className={clsx('bg-surface-secondary border border-border rounded-2xl shadow-sm transition-colors', className)}>
+    <ShadCard className={cn('gap-0 py-0 overflow-hidden', className)}>
       {title && (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-[15px] font-semibold text-text-primary tracking-tight">{title}</h3>
-          {extra}
-        </div>
+        <CardHeader className="border-b px-4 !py-2.5 min-h-11 flex-row items-center [.border-b]:pb-2.5">
+          <CardTitle className="panel-label">{title}</CardTitle>
+          {extra && <CardAction className="self-center row-start-1">{extra}</CardAction>}
+        </CardHeader>
       )}
-      <div className={noPadding ? '' : 'p-6'}>{children}</div>
-    </div>
+      <CardContent className={noPadding ? 'p-0' : 'p-4'}>{children}</CardContent>
+    </ShadCard>
   );
 }

@@ -25,6 +25,7 @@ from typing import Any
 
 from ..base import BaseStrategy, Signal, SignalType, StrategyConfig
 from ..indicators import calc_atr
+from ..mixins import EMASlopeRegimeMixin, SignalBalanceMixin
 from ..registry import auto_register
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ DEFAULT_PARAMS: dict[str, Any] = {
 
 
 @auto_register("supertrend")
-class SupertrendStrategy(BaseStrategy):
+class SupertrendStrategy(SignalBalanceMixin, EMASlopeRegimeMixin, BaseStrategy):
     """Supertrend 日内趋势策略 — ATR 通道翻转信号。"""
 
     def __init__(self, config: StrategyConfig) -> None:
@@ -72,6 +73,7 @@ class SupertrendStrategy(BaseStrategy):
         self._lows.append(l)
         self._closes.append(c)
         self._bar_count += 1
+        self._regime_update(c)
 
         atr_period = self.get_param("atr_period", 10)
         if self._bar_count < atr_period + 3:
@@ -142,28 +144,30 @@ class SupertrendStrategy(BaseStrategy):
         confirm = self.get_param("confirm_bars", 2)
 
         if not self._position_side and self._cd <= 0 and trend_changed:
-            if self._trend == 1:
+            if self._trend == 1 and self._regime_allow(SignalType.LONG_ENTRY) and self._sb_allow(SignalType.LONG_ENTRY):
                 sig = Signal(
                     strategy_id=self.strategy_id, symbol=symbol,
                     signal_type=SignalType.LONG_ENTRY,
                     strength=0.8, price=c,
-                    reason=f"st_buy: trend_flip_up c={c:.1f} st={self._supertrend:.1f}",
+                    reason=f"st_buy: trend_flip_up c={c:.1f} st={self._supertrend:.1f} regime={self._regime()}",
                 )
                 signals.append(sig)
                 self.record_signal(sig)
+                self._sb_record(SignalType.LONG_ENTRY)
                 self._position_side = "long"
                 self._entry_price = c
                 self._hold_bars = 0
 
-            elif self._trend == -1:
+            elif self._trend == -1 and self._regime_allow(SignalType.SHORT_ENTRY) and self._sb_allow(SignalType.SHORT_ENTRY):
                 sig = Signal(
                     strategy_id=self.strategy_id, symbol=symbol,
                     signal_type=SignalType.SHORT_ENTRY,
                     strength=0.8, price=c,
-                    reason=f"st_sell: trend_flip_down c={c:.1f} st={self._supertrend:.1f}",
+                    reason=f"st_sell: trend_flip_down c={c:.1f} st={self._supertrend:.1f} regime={self._regime()}",
                 )
                 signals.append(sig)
                 self.record_signal(sig)
+                self._sb_record(SignalType.SHORT_ENTRY)
                 self._position_side = "short"
                 self._entry_price = c
                 self._hold_bars = 0

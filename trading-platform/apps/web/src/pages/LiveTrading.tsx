@@ -4,13 +4,10 @@ import {
   ArrowUpRight, ArrowDownRight, Activity, Radio,
 } from 'lucide-react';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
-import {
   useLiveTradingStatus, useLiveStrategies, useLiveLeaderboard,
   useStartLiveTrading, useStopLiveTrading, useSwitchMode,
-  useToggleStrategy, useLiveEvents,
+  useToggleStrategy, useLiveEvents, usePlaceLiveOrder, useRiskProbe,
+  useLiveRiskStatus,
 } from '@/hooks/useLiveTrading';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
@@ -37,29 +34,51 @@ export default function LiveTrading() {
   const { data: status } = useLiveTradingStatus() as { data: Record<string, unknown> | undefined };
   const { data: strategies = [] } = useLiveStrategies() as { data: Record<string, unknown>[] };
   const { data: leaderboard = [] } = useLiveLeaderboard() as { data: Record<string, unknown>[] };
+  const { data: riskStatus } = useLiveRiskStatus() as { data: Record<string, unknown> | undefined };
   const startTrading = useStartLiveTrading();
   const stopTrading = useStopLiveTrading();
   const switchMode = useSwitchMode();
   const toggleStrategy = useToggleStrategy();
+  const placeOrder = usePlaceLiveOrder();
+  const riskProbe = useRiskProbe();
   const { events, connected } = useLiveEvents();
 
   const [activeTab, setActiveTab] = useState('strategies');
   const [startMode, setStartMode] = useState<'paper' | 'live'>('paper');
   const [startMarket, setStartMarket] = useState<'crypto' | 'futures' | 'both'>('crypto');
 
+  // Manual order form
+  const [orderSymbol, setOrderSymbol] = useState('rb2609');
+  const [orderDir, setOrderDir] = useState<'LONG' | 'SHORT'>('LONG');
+  const [orderOffset, setOrderOffset] = useState<'OPEN' | 'CLOSE'>('OPEN');
+  const [orderPrice, setOrderPrice] = useState('3500');
+  const [orderVolume, setOrderVolume] = useState('1');
+  const [probeResult, setProbeResult] = useState<Record<string, unknown> | null>(null);
+
   const isRunning = !!(status as Record<string, unknown>)?.running;
   const currentMode = String((status as Record<string, unknown>)?.mode || 'paper');
+  const liveEnabled = !!(status as Record<string, unknown>)?.live_enabled;
   const barCount = Number((status as Record<string, unknown>)?.bar_count || 0);
   const strategyCount = Number((status as Record<string, unknown>)?.strategy_count || 0);
   const summary = (status as Record<string, unknown>)?.accounts_summary as Record<string, Record<string, number>> | undefined;
+  const riskLimits = (riskStatus?.limits as string[]) || [];
+  const rejectCount = Number(riskStatus?.reject_count || 0);
 
   const recentFills = useMemo(
     () => events.filter((e) => e.type === 'trade_fill').slice(-20),
     [events],
   );
+  const riskEvents = useMemo(
+    () => events.filter((e) => e.type === 'risk_alert').slice(-20),
+    [events],
+  );
 
   const handleStart = async () => {
     if (startMode === 'live') {
+      if (!liveEnabled) {
+        toast.error('实盘未解锁：请先设置 LIVE_TRADING_ENABLED=true');
+        return;
+      }
       const ok = await confirm({
         title: '确认启动实盘交易',
         description: '实盘模式会向真实交易所发送订单，请确保已配置正确的凭证和风控参数。',
@@ -95,6 +114,10 @@ export default function LiveTrading() {
   const handleSwitchMode = async () => {
     const targetMode = currentMode === 'paper' ? 'live' : 'paper';
     if (targetMode === 'live') {
+      if (!liveEnabled) {
+        toast.error('实盘未解锁：请先设置 LIVE_TRADING_ENABLED=true');
+        return;
+      }
       const ok = await confirm({
         title: '切换到实盘模式',
         description: '切换后，策略信号将发送到真实交易所。请确认！',
@@ -111,6 +134,59 @@ export default function LiveTrading() {
     }
   };
 
+  const handleProbe = async () => {
+    try {
+      const result = await riskProbe.mutateAsync({
+        symbol: orderSymbol,
+        exchange: 'SHFE',
+        direction: orderDir,
+        offset: orderOffset,
+        price: Number(orderPrice) || 0,
+        volume: Number(orderVolume) || 1,
+      });
+      setProbeResult(result);
+      if (result.allowed) {
+        toast.success('RiskGate 放行');
+      } else {
+        const gate = result.gate as Record<string, unknown> | undefined;
+        toast.error(`RiskGate 拦截：${String(gate?.reason || 'rejected')}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '探测失败');
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    const isLive = currentMode === 'live';
+    if (isLive) {
+      const ok = await confirm({
+        title: '确认实盘下单',
+        description: `${orderDir} ${orderOffset} ${orderSymbol} × ${orderVolume} @ ${orderPrice}`,
+        variant: 'destructive',
+        confirmText: '确认下单',
+      });
+      if (!ok) return;
+    }
+    try {
+      const result = await placeOrder.mutateAsync({
+        order: {
+          symbol: orderSymbol,
+          exchange: 'SHFE',
+          direction: orderDir,
+          offset: orderOffset,
+          price: Number(orderPrice) || 0,
+          volume: Number(orderVolume) || 1,
+          strategy_id: 'manual',
+        },
+        live: isLive,
+      });
+      toast.success(`下单结果：${String(result.status)} (${String(result.mode)})`);
+      setProbeResult(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '下单失败');
+    }
+  };
+
   return (
     <div className="px-[3%] py-[2%] space-y-[clamp(1rem,2vw,1.5rem)] max-w-[96rem] mx-auto">
       {/* Header */}
@@ -121,6 +197,10 @@ export default function LiveTrading() {
             <span className={cn('w-2 h-2 rounded-full', connected ? 'bg-profit animate-pulse' : 'bg-loss')} />
             <span className="text-xs text-text-muted">{connected ? 'WebSocket 已连接' : '未连接'}</span>
           </div>
+          <StatusBadge
+            variant={liveEnabled ? 'warning' : 'neutral'}
+            label={liveEnabled ? 'LIVE 已解锁' : 'LIVE 锁定'}
+          />
         </div>
         <div className="flex items-center gap-2">
           {isRunning && (
@@ -201,12 +281,92 @@ export default function LiveTrading() {
             <div className="mt-4 p-3 bg-loss/5 border border-loss/20 rounded-lg flex items-start gap-2">
               <Zap className="w-4 h-4 text-loss mt-0.5 shrink-0" />
               <p className="text-xs text-loss">
-                实盘模式将向真实交易所发送订单，产生实际盈亏。请确保已配置正确的 API Key 和风控参数。
+                实盘模式将向真实交易所发送订单。需 LIVE_TRADING_ENABLED=true + 二次确认。
+                {!liveEnabled && ' 当前环境未解锁实盘。'}
               </p>
             </div>
           )}
         </Card>
       )}
+
+      {/* Manual order + RiskGate */}
+      <Card title="手动下单 / RiskGate" extra={<Radio className="w-4 h-4 text-brand" />}>
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
+          <div>
+            <label className="block text-xs text-text-muted mb-1">合约</label>
+            <input
+              value={orderSymbol}
+              onChange={(e) => setOrderSymbol(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-text-muted mb-1">方向</label>
+            <select
+              value={orderDir}
+              onChange={(e) => setOrderDir(e.target.value as 'LONG' | 'SHORT')}
+              className="w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm"
+            >
+              <option value="LONG">LONG</option>
+              <option value="SHORT">SHORT</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-text-muted mb-1">开平</label>
+            <select
+              value={orderOffset}
+              onChange={(e) => setOrderOffset(e.target.value as 'OPEN' | 'CLOSE')}
+              className="w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm"
+            >
+              <option value="OPEN">OPEN</option>
+              <option value="CLOSE">CLOSE</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-text-muted mb-1">价格</label>
+            <input
+              value={orderPrice}
+              onChange={(e) => setOrderPrice(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-text-muted mb-1">手数</label>
+            <input
+              value={orderVolume}
+              onChange={(e) => setOrderVolume(e.target.value)}
+              className="w-full rounded-lg border border-border bg-surface-tertiary px-3 py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div className="flex items-end gap-2">
+            <Button variant="secondary" size="sm" className="flex-1" onClick={handleProbe} loading={riskProbe.isPending}>
+              风控探测
+            </Button>
+            <Button
+              variant={currentMode === 'live' ? 'destructive' : 'primary'}
+              size="sm"
+              className="flex-1"
+              onClick={handlePlaceOrder}
+              loading={placeOrder.isPending}
+            >
+              下单
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs text-text-muted mb-2">
+          <span>闸：{riskLimits.length ? riskLimits.join(' · ') : '加载中…'}</span>
+          <span>· 累计拒绝 {rejectCount}</span>
+          <span>· 风控事件 {riskEvents.length}</span>
+        </div>
+        {probeResult && (
+          <div className={cn(
+            'p-3 rounded-lg border text-xs font-mono',
+            probeResult.allowed ? 'bg-profit/5 border-profit/20 text-profit' : 'bg-loss/5 border-loss/20 text-loss',
+          )}>
+            {JSON.stringify(probeResult, null, 2)}
+          </div>
+        )}
+      </Card>
 
       {/* Running KPIs */}
       {isRunning && (

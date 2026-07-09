@@ -43,24 +43,47 @@ class TqBrokerClient:
         """Underlying TqApi instance for market data (TqMarketAdapter)."""
         return self._api
 
-    async def connect(self) -> None:
-        """建立 TqSdk 连接."""
+    async def connect(self, max_retries: int = 2, retry_delay: float = 5.0) -> None:
+        """建立 TqSdk 连接 (with retry on timeout)."""
         try:
             from tqsdk import TqApi, TqAuth, TqAccount, TqSim
-
-            auth = TqAuth(self._auth_email, self._auth_password) if self._auth_email else None
-
-            if self._broker_id and self._account_id:
-                self._account = TqAccount(self._broker_id, self._account_id, self._auth_password or "")
-            else:
-                self._account = TqSim(init_balance=1_000_000)
-
-            self._api = TqApi(account=self._account, auth=auth)
-            self._loop = asyncio.get_event_loop()
-            logger.info("TqSdk connected (account=%s)", type(self._account).__name__)
         except ImportError:
-            logger.warning("tqsdk not installed — running in stub mode")
+            logger.warning(
+                "⚠️ tqsdk NOT installed — STUB MODE active. "
+                "All orders will return 'stub-order-id' and NOT reach any exchange."
+            )
             self._api = None
+            return
+
+        auth = TqAuth(self._auth_email, self._auth_password) if self._auth_email else None
+
+        if self._broker_id and self._account_id:
+            self._account = TqAccount(self._broker_id, self._account_id, self._auth_password or "")
+        else:
+            self._account = TqSim(init_balance=1_000_000)
+
+        last_err: Exception | None = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                self._api = TqApi(account=self._account, auth=auth)
+                self._loop = asyncio.get_event_loop()
+                logger.info("TqSdk connected (account=%s, attempt=%d)", type(self._account).__name__, attempt)
+                return
+            except Exception as exc:
+                last_err = exc
+                logger.warning(
+                    "TqSdk connect attempt %d/%d failed: %s",
+                    attempt, max_retries, exc,
+                )
+                if attempt < max_retries:
+                    await asyncio.sleep(retry_delay)
+
+        logger.warning(
+            "⚠️ TqSdk connection failed after %d attempts — falling back to STUB MODE. "
+            "Last error: %s",
+            max_retries, last_err,
+        )
+        self._api = None
 
     async def disconnect(self) -> None:
         """关闭 TqSdk 连接."""
@@ -86,7 +109,10 @@ class TqBrokerClient:
     ) -> str:
         """下单，返回 order_id."""
         if self._api is None:
-            logger.warning("stub mode: order not placed")
+            logger.warning(
+                "⚠️ STUB: place_order(%s %s %s vol=%d) → stub-order-id (NOT sent to exchange)",
+                symbol, direction.name, offset.name, volume,
+            )
             return "stub-order-id"
 
         tq_direction = "BUY" if direction == Direction.LONG else "SELL"
@@ -103,6 +129,7 @@ class TqBrokerClient:
     async def cancel_order(self, order_id: str) -> bool:
         """撤单."""
         if self._api is None:
+            logger.warning("⚠️ STUB: cancel_order(%s) — no exchange connection", order_id)
             return False
         self._api.cancel_order(order_id)
         return True
@@ -110,6 +137,7 @@ class TqBrokerClient:
     async def get_positions(self) -> list[Position]:
         """获取全部持仓."""
         if self._api is None:
+            logger.debug("STUB: get_positions() → empty (no exchange connection)")
             return []
         # TqSdk positions are keyed by symbol
         result: list[Position] = []
@@ -138,6 +166,7 @@ class TqBrokerClient:
     async def get_account_info(self) -> dict[str, Any]:
         """获取账户资金信息."""
         if self._api is None:
+            logger.debug("STUB: get_account_info() → zeros (no exchange connection)")
             return {"balance": 0, "available": 0, "margin": 0}
         acc = self._api.get_account()
         return {

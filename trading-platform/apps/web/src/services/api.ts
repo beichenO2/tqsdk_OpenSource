@@ -16,8 +16,10 @@ function getAuthHeaders(): Record<string, string> {
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
     ...options,
+    // headers must come after ...options so caller headers merge instead of
+    // replacing Content-Type/auth (options.headers may be undefined).
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders(), ...options?.headers },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -137,9 +139,10 @@ interface BackendTick {
 }
 
 function toQuote(t: BackendTick, exchange: string): Quote {
-  const last = Number(t.last_price);
-  const high = Number(t.highest);
-  const low = Number(t.lowest);
+  // closed_market_cache fallback only carries last_price — default everything else
+  const last = Number(t.last_price ?? 0);
+  const high = Number(t.highest ?? last);
+  const low = Number(t.lowest ?? last);
   const bid1 = Number(t.bid_price1 ?? last);
   const ask1 = Number(t.ask_price1 ?? last);
   return {
@@ -148,20 +151,20 @@ function toQuote(t: BackendTick, exchange: string): Quote {
     last_price: last,
     pre_close: last,
     open: last,
-    high,
-    low,
-    volume: t.volume,
-    amount: Number(t.amount),
-    open_interest: t.open_interest ?? 0,
-    bid_price1: bid1,
-    bid_volume1: t.bid_volume1 ?? 0,
-    ask_price1: ask1,
-    ask_volume1: t.ask_volume1 ?? 0,
-    upper_limit: high,
-    lower_limit: low,
+    high: Number.isFinite(high) ? high : last,
+    low: Number.isFinite(low) ? low : last,
+    volume: Number(t.volume ?? 0),
+    amount: Number(t.amount ?? 0),
+    open_interest: Number(t.open_interest ?? 0),
+    bid_price1: Number.isFinite(bid1) ? bid1 : last,
+    bid_volume1: Number(t.bid_volume1 ?? 0),
+    ask_price1: Number.isFinite(ask1) ? ask1 : last,
+    ask_volume1: Number(t.ask_volume1 ?? 0),
+    upper_limit: Number.isFinite(high) ? high : last,
+    lower_limit: Number.isFinite(low) ? low : last,
     change: 0,
     change_percent: 0,
-    datetime: t.datetime,
+    datetime: t.datetime ?? '',
   };
 }
 
@@ -270,7 +273,7 @@ export const api = {
     const results = await Promise.allSettled(
       instruments.map(async (inst) => {
         const tick = await request<BackendTick>(`/market/quote/${encodeURIComponent(inst.symbol)}`);
-        if (tick.message === 'no_quote') return null;
+        if (tick.message === 'no_quote' || tick.last_price == null) return null;
         return toQuote(tick, inst.exchange ?? '');
       }),
     );
@@ -460,6 +463,242 @@ export const api = {
       return [];
     }
   },
+
+  // Research
+  getResearchRuns: (limit = 50) =>
+    request<{ runs: unknown[] }>(`/research/runs?limit=${limit}`),
+  createResearchRun: (params: Record<string, unknown>) =>
+    request<{ run_id: string; status: string }>('/research/runs', { method: 'POST', body: JSON.stringify(params) }),
+  getResearchRun: (runId: string) =>
+    request<Record<string, unknown>>(`/research/runs/${runId}`),
+  executeResearchRun: (runId: string) =>
+    request<unknown>(`/research/runs/${runId}/execute`, { method: 'POST' }),
+  getResearchPipeline: (runId: string) =>
+    request<{
+      run_id: string;
+      steps: { id: string; label: string; description: string; status: string; done: boolean }[];
+      completed: number;
+      total: number;
+      progress: number;
+      pipeline_stage: string;
+      promotion: string;
+      gate_passed: boolean | null;
+    }>(`/research/runs/${runId}/pipeline`),
+  promoteResearchRun: (runId: string, target: string, note = '', force = false) =>
+    request<{
+      ok: boolean;
+      from: string;
+      to: string;
+      pipeline: Record<string, unknown>;
+      warning?: string | null;
+    }>(`/research/runs/${runId}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({ target, note, force }),
+    }),
+  setResearchFactorSnapshot: (
+    runId: string,
+    body: { ic?: Record<string, unknown>; dedupe?: Record<string, unknown>; factor_names?: string[] },
+  ) =>
+    request<{ ok: boolean; pipeline: Record<string, unknown> }>(
+      `/research/runs/${runId}/factor-snapshot`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  // MCP
+  getMcpTools: () =>
+    request<{ tools: unknown[] }>('/mcp/tools'),
+  callMcpTool: (name: string, args: Record<string, unknown> = {}) =>
+    request<unknown>('/mcp/tools/call', { method: 'POST', body: JSON.stringify({ name, arguments: args }) }),
+
+  // Settings
+  getSettings: () =>
+    request<Record<string, unknown>>('/settings'),
+
+  // Live trading
+  getLiveTradingStatus: () =>
+    request<Record<string, unknown>>('/live-trading/status'),
+  getLiveStrategies: () =>
+    request<Record<string, unknown>[]>('/live-trading/strategies'),
+  getLiveLeaderboard: (market?: string, topN = 20) => {
+    const qs = new URLSearchParams();
+    if (market) qs.set('market', market);
+    qs.set('top_n', String(topN));
+    return request<Record<string, unknown>[]>(`/live-trading/leaderboard?${qs}`);
+  },
+  startLiveTrading: (params: Record<string, unknown>, liveConfirm?: string) =>
+    request<Record<string, unknown>>('/live-trading/start', {
+      method: 'POST',
+      body: JSON.stringify(params),
+      headers: liveConfirm ? { 'X-Live-Confirm': liveConfirm } : undefined,
+    }),
+  stopLiveTrading: () =>
+    request<Record<string, unknown>>('/live-trading/stop', { method: 'POST' }),
+  switchMode: (mode: string, liveConfirm?: string) =>
+    request<Record<string, unknown>>('/live-trading/switch-mode', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+      headers: liveConfirm ? { 'X-Live-Confirm': liveConfirm } : undefined,
+    }),
+  toggleLiveStrategy: (accountId: number) =>
+    request<Record<string, unknown>>(`/live-trading/strategies/${accountId}/toggle`, {
+      method: 'POST',
+    }),
+  /** @deprecated use toggleLiveStrategy — kept for older call sites */
+  toggleStrategy: (accountId: number) =>
+    request<Record<string, unknown>>(`/live-trading/strategies/${accountId}/toggle`, {
+      method: 'POST',
+    }),
+  placeLiveOrder: (
+    order: {
+      symbol: string;
+      exchange?: string;
+      direction: string;
+      offset?: string;
+      price: number | string;
+      volume: number;
+      strategy_id?: string;
+    },
+    liveConfirm?: string,
+  ) =>
+    request<Record<string, unknown>>('/live-trading/order', {
+      method: 'POST',
+      body: JSON.stringify(order),
+      headers: liveConfirm ? { 'X-Live-Confirm': liveConfirm } : undefined,
+    }),
+  riskProbe: (params: {
+    symbol: string;
+    exchange?: string;
+    direction?: string;
+    offset?: string;
+    price?: number | string;
+    volume?: number;
+  }) =>
+    request<Record<string, unknown>>('/live-trading/risk-probe', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  getLiveRiskStatus: () =>
+    request<Record<string, unknown>>('/live-trading/risk-status'),
+
+  // System / optimizer
+  getSystemHealth: () =>
+    request<Record<string, unknown>>('/system/health'),
+  getOptimizerChampions: (variant?: string, topN = 20) => {
+    const qs = new URLSearchParams({ top_n: String(topN) });
+    if (variant) qs.set('variant', variant);
+    return request<{ variants: string[]; entries: Record<string, unknown>[]; total: number }>(
+      `/optimizer/champions?${qs}`,
+    );
+  },
+  getOptimizerGates: () =>
+    request<{ gates: Record<string, unknown>[]; count: number }>('/optimizer/gates'),
+  getOptimizerGate: (name: string) =>
+    request<Record<string, unknown>>(`/optimizer/gates/${encodeURIComponent(name)}`),
+
+  // Platform data / skills
+  getPlatformData: () =>
+    request<{
+      data_dir: string;
+      caches: { futures: Record<string, unknown>; crypto: Record<string, unknown> };
+      extras: { name: string; file_count: number; exists: boolean }[];
+      collector: Record<string, unknown>;
+      tqsdk_gateway: Record<string, unknown>;
+    }>('/platform/data'),
+  getPlatformSkills: () =>
+    request<{
+      dir: string;
+      skills: Record<string, unknown>[];
+      count: number;
+    }>('/platform/skills'),
+  getPlatformSkill: (name: string) =>
+    request<Record<string, unknown>>(`/platform/skills/${encodeURIComponent(name)}`),
+
+  // Factors (R10)
+  listFactors: (category?: string) => {
+    const qs = category ? `?category=${encodeURIComponent(category)}` : '';
+    return request<{
+      factors: Record<string, unknown>[];
+      count: number;
+      categories: string[];
+    }>(`/factors${qs}`);
+  },
+  getFactor: (name: string) =>
+    request<Record<string, unknown>>(`/factors/${encodeURIComponent(name)}`),
+  computeFactors: (body: {
+    symbol: string;
+    factor_names: string[];
+    limit?: number;
+    params?: Record<string, Record<string, unknown>>;
+  }) =>
+    request<{
+      symbol: string;
+      bars: number;
+      factors: Record<string, { points: { t: string; v: number }[]; last?: number; n?: number }>;
+    }>('/factors/compute', { method: 'POST', body: JSON.stringify(body) }),
+  analyzeFactors: (body: {
+    symbol: string;
+    factor_names: string[];
+    limit?: number;
+    horizon?: number;
+    dedupe_threshold?: number;
+  }) =>
+    request<{
+      symbol: string;
+      reports: Record<string, unknown>[];
+      correlation: Record<string, unknown>;
+      dedupe: Record<string, unknown>;
+    }>('/factors/analyze', { method: 'POST', body: JSON.stringify(body) }),
+  analyzeCrossSection: (body: {
+    factor_name: string;
+    symbols?: string[];
+    limit?: number;
+    horizon?: number;
+    quantiles?: number;
+  }) =>
+    request<{
+      mode: string;
+      horizon: number;
+      summary: Record<string, number | null>;
+      quantile_returns: {
+        mean_returns?: Record<string, number | null>;
+        long_short?: number | null;
+        n_periods?: number;
+      };
+      ic_series: { t: string; v: number }[];
+      n_assets: number;
+      symbols_used?: string[];
+      factor?: Record<string, unknown>;
+    }>('/factors/analyze-cs', { method: 'POST', body: JSON.stringify(body) }),
+  combineFactors: (body: {
+    symbol: string;
+    factor_names: string[];
+    method?: string;
+    limit?: number;
+  }) =>
+    request<Record<string, unknown>>('/factors/combine', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  evolveFactors: (body: {
+    symbol?: string;
+    n_proposals?: number;
+    limit?: number;
+    use_llm?: boolean;
+    existing_exprs?: string[];
+  } = {}) =>
+    request<{
+      symbol?: string;
+      arm: string;
+      bandit: Record<string, unknown>;
+      candidates: Record<string, unknown>[];
+      best: Record<string, unknown> | null;
+      n_valid: number;
+      path?: string;
+    }>('/factors/evolve', { method: 'POST', body: JSON.stringify(body) }),
+  getEvolveLatest: () =>
+    request<{ exists: boolean; latest: Record<string, unknown> | null }>(
+      '/factors/evolve/latest',
+    ),
 };
 
 export function createWsConnection(

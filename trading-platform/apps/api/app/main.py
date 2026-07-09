@@ -23,6 +23,8 @@ def _bootstrap_repo_import_paths() -> None:
         repo_root / "packages" / "broker_tqsdk",
         repo_root / "packages" / "broker_crypto" / "src",
         repo_root / "packages" / "risk",
+        repo_root / "packages" / "factor",
+        repo_root / "packages" / "features",
         repo_root / "packages" / "sim_live",
         repo_root / "packages" / "security" / "src",
         repo_root / "packages",
@@ -40,19 +42,33 @@ from core.logging_config import setup_logging
 from app.deps import set_btc_broker_manager, set_execution_service, set_market_adapter
 from app.services.polarprivate_bootstrap import init_btc_broker
 from app.services.tqsdk_bootstrap import init_tqsdk_runtime
-from app.routers import backtest, btc, crypto_data, deploy, health, live_trading, market, ml, orders, paper_trading, positions, strategies, ws
+from app.routers import btc, crypto_data, deploy, factors, health, live_trading, market, optimizer, orders, paper_trading, platform, positions, strategies, ws
 
 try:
-    from app.routers import explain
+    from app.routers import mcp
 except (ImportError, ModuleNotFoundError):
-    explain = None  # type: ignore[assignment]
+    mcp = None  # type: ignore[assignment]
 
 try:
-    from app.routers import research
+    from app.routers import settings
 except (ImportError, ModuleNotFoundError):
-    research = None  # type: ignore[assignment]
+    settings = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+_OPTIONAL_ROUTERS = ("backtest", "ml", "explain", "research")
+_optional: dict[str, object] = {}
+for _name in _OPTIONAL_ROUTERS:
+    try:
+        _optional[_name] = __import__(f"app.routers.{_name}", fromlist=[_name])
+    except (ImportError, ModuleNotFoundError, AttributeError):
+        _optional[_name] = None
+        logger.debug("Optional router %s not available", _name)
+
+backtest = _optional["backtest"]
+ml = _optional["ml"]
+explain = _optional["explain"]
+research = _optional["research"]
 
 
 @asynccontextmanager
@@ -162,9 +178,11 @@ def create_app() -> FastAPI:
     app.include_router(orders.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(positions.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(strategies.router, prefix="/api/v1", dependencies=auth_deps)
-    app.include_router(backtest.router, prefix="/api/v1", dependencies=auth_deps)
+    if backtest is not None:
+        app.include_router(backtest.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(market.router, prefix="/api/v1", dependencies=auth_deps)
-    app.include_router(ml.router, prefix="/api/v1", dependencies=auth_deps)
+    if ml is not None:
+        app.include_router(ml.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(btc.router, prefix="/api/v1/btc", tags=["btc"], dependencies=auth_deps)
     app.include_router(crypto_data.router, prefix="/api/v1", dependencies=auth_deps)
     if explain is not None:
@@ -174,7 +192,14 @@ def create_app() -> FastAPI:
     app.include_router(paper_trading.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(live_trading.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(deploy.router, prefix="/api/v1", dependencies=auth_deps)
+    app.include_router(optimizer.router, prefix="/api/v1", dependencies=auth_deps)
+    app.include_router(platform.router, prefix="/api/v1", dependencies=auth_deps)
+    app.include_router(factors.router, prefix="/api/v1", dependencies=auth_deps)
     app.include_router(ws.router)
+    if mcp is not None:
+        app.include_router(mcp.router, prefix="/api/v1", dependencies=auth_deps)
+    if settings is not None:
+        app.include_router(settings.router, prefix="/api/v1", dependencies=auth_deps)
 
     return app
 

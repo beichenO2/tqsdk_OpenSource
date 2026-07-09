@@ -101,6 +101,12 @@ class ResearchRun:
     tags: list[str] = field(default_factory=list)
     notes: str = ""
 
+    # R10 pipeline / promote
+    pipeline_stage: str = "idea"  # current focus step id
+    promotion: str = "research"  # research | backtest | paper | live
+    factor_snapshot: dict[str, Any] = field(default_factory=dict)
+    model_snapshot: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["status"] = self.status.value
@@ -155,6 +161,92 @@ class ResearchRun:
             decision="approved" if all(v.get("passed") for v in self.validation) else "rejected",
         )
 
+    def derive_pipeline(self) -> dict[str, Any]:
+        """Derive 8-step pipeline status from run fields (PRD §4.1)."""
+        steps_meta = [
+            ("idea", "Idea", "研究意图 / prompt"),
+            ("factor", "Factor", "因子计算与快照"),
+            ("validate_factor", "Validate-F", "因子 IC/去重体检"),
+            ("model", "Model", "模型 / 参数空间"),
+            ("backtest", "Backtest", "回测执行"),
+            ("gate", "Gate", "OOS/WF/MC 门控"),
+            ("deploy", "Deploy", "参数部署 / paper"),
+            ("record", "Record", "产物归档"),
+        ]
+
+        has_idea = bool(self.prompt.strip()) or bool(self.strategy_name)
+        has_factor = bool(self.factor_snapshot) or "factor" in (self.tags or [])
+        has_vf = bool(self.factor_snapshot.get("dedupe") or self.factor_snapshot.get("ic"))
+        has_model = bool(self.model_snapshot) or bool(self.config.get("param_space"))
+        has_bt = bool(self.backtest_results) or bool(self.metrics) or self.status in (
+            RunStatus.COMPLETED, RunStatus.RUNNING, RunStatus.FAILED,
+        )
+        gates = self.validation or []
+        has_gate = len(gates) > 0
+        gate_pass = bool(gates) and all(g.get("passed") for g in gates)
+        has_deploy = self.promotion in ("paper", "live") or bool(self.artifact.get("deployed"))
+        has_record = bool(self.artifact) or (
+            self.status == RunStatus.COMPLETED and bool(self.metrics)
+        )
+
+        done_flags = [
+            has_idea, has_factor, has_vf, has_model, has_bt, has_gate, has_deploy, has_record,
+        ]
+        first_open = next((i for i, d in enumerate(done_flags) if not d), None)
+
+        steps: list[dict[str, Any]] = []
+        for i, ((sid, label, desc), done) in enumerate(zip(steps_meta, done_flags)):
+            if done:
+                st = "done"
+            elif first_open is not None and i == first_open:
+                st = "active"
+            else:
+                st = "pending"
+            steps.append({
+                "id": sid,
+                "label": label,
+                "description": desc,
+                "status": st,
+                "done": done,
+            })
+
+        completed = sum(1 for d in done_flags if d)
+        return {
+            "run_id": self.run_id,
+            "steps": steps,
+            "completed": completed,
+            "total": len(steps),
+            "progress": round(completed / len(steps), 3),
+            "pipeline_stage": steps[first_open]["id"] if first_open is not None else "record",
+            "promotion": self.promotion,
+            "status": self.status.value if isinstance(self.status, RunStatus) else self.status,
+            "gate_passed": gate_pass if has_gate else None,
+        }
+
+    def can_promote_to(self, target: str) -> tuple[bool, str]:
+        """Check whether promotion to target stage is allowed."""
+        order = ["research", "backtest", "paper", "live"]
+        if target not in order:
+            return False, f"Unknown promotion target: {target}"
+        cur = self.promotion if self.promotion in order else "research"
+        if order.index(target) <= order.index(cur):
+            return False, f"Already at or past '{cur}'"
+        if target == "backtest":
+            if not (self.prompt or self.strategy_name):
+                return False, "Need idea/strategy before backtest promotion"
+            return True, "ok"
+        if target == "paper":
+            if self.status != RunStatus.COMPLETED and not self.metrics:
+                return False, "Need completed backtest/metrics before paper"
+            if self.validation and not all(v.get("passed") for v in self.validation):
+                return False, "Gate validation not fully passed"
+            return True, "ok"
+        if target == "live":
+            if self.promotion != "paper":
+                return False, "Must be at paper before live"
+            return True, "ok"
+        return True, "ok"
+
 
 class RunStore:
     """File-based store for research runs."""
@@ -191,6 +283,10 @@ class RunStore:
                     "created_at": data.get("created_at", 0),
                     "prompt": data.get("prompt", "")[:100],
                     "metrics": {k: data.get("metrics", {}).get(k) for k in ("sharpe", "total_return", "max_dd")},
+                    "symbols": data.get("symbols", []),
+                    "timeframe": data.get("timeframe", ""),
+                    "tags": data.get("tags", []),
+                    "promotion": data.get("promotion", "research"),
                 })
             except Exception:
                 continue

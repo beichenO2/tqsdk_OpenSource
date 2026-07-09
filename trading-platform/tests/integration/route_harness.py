@@ -24,6 +24,9 @@ _VALID_ROUTERS: frozenset[str] = frozenset(
         "btc",
         "crypto_data",
         "explain",
+        "research",
+        "mcp",
+        "settings",
     }
 )
 
@@ -38,6 +41,9 @@ _DEFAULT_ORDER: tuple[str, ...] = (
     "btc",
     "crypto_data",
     "explain",
+    "research",
+    "mcp",
+    "settings",
 )
 
 
@@ -116,6 +122,21 @@ def _include_router(app: FastAPI, name: str) -> None:
         from app.routers import explain
 
         app.include_router(explain.router, prefix="/api/v1")
+        return
+    if name == "research":
+        from app.routers import research
+
+        app.include_router(research.router, prefix="/api/v1")
+        return
+    if name == "mcp":
+        from app.routers import mcp
+
+        app.include_router(mcp.router, prefix="/api/v1")
+        return
+    if name == "settings":
+        from app.routers import settings
+
+        app.include_router(settings.router, prefix="/api/v1")
         return
     raise ValueError(f"Unknown router name: {name!r}")
 

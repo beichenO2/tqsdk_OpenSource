@@ -15,7 +15,7 @@ from core.models.tick import Tick
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891")
+DEFAULT_GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890")
 
 
 class TqGatewayMarketAdapter:
@@ -39,9 +39,14 @@ class TqGatewayMarketAdapter:
         except Exception:
             logger.exception("gateway get_quote failed for %s", symbol)
             return None
+        raw_dt = q.get("datetime")
+        if raw_dt:
+            tick_dt = datetime.fromtimestamp(int(raw_dt) / 1e9)
+        else:
+            tick_dt = datetime.now()
         return Tick(
             symbol=symbol,
-            datetime=datetime.fromtimestamp(q["datetime"] / 1e9),
+            datetime=tick_dt,
             last_price=Decimal(str(q["last_price"])),
             highest=Decimal(str(q["highest"])),
             lowest=Decimal(str(q["lowest"])),

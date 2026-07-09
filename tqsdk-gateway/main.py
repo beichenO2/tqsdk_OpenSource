@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from credentials import load_credentials
-from session import get_session
+from session import SessionBusyError, get_session
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,13 +71,19 @@ def health() -> dict:
 @app.get("/api/v1/account")
 def account() -> dict:
     session = _require_session()
-    return session.get_account_info()
+    try:
+        return session.get_account_info()
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/positions")
 def positions() -> dict:
     session = _require_session()
-    return {"items": session.get_positions()}
+    try:
+        return {"items": session.get_positions()}
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/v1/orders")
@@ -108,6 +114,8 @@ def quote(symbol: str) -> dict:
     session = _require_session()
     try:
         return session.get_quote(symbol)
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -118,6 +126,8 @@ def klines(symbol: str, duration: int = 300, length: int = 200) -> dict:
     try:
         rows = session.get_klines(symbol, duration, max(1, min(length, 8000)))
         return {"symbol": symbol, "duration": duration, "items": rows}
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -128,6 +138,8 @@ def instruments(exchange_id: str | None = None, ins_class: str = "FUTURE") -> di
     try:
         symbols = session.list_instruments(exchange_id=exchange_id, ins_class=ins_class)
         return {"items": [{"symbol": s} for s in symbols]}
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -136,5 +148,5 @@ if __name__ == "__main__":
     import uvicorn
 
     host = os.getenv("TQSDK_GATEWAY_HOST", "127.0.0.1")
-    port = int(os.getenv("TQSDK_GATEWAY_PORT", "12891"))
+    port = int(os.getenv("TQSDK_GATEWAY_PORT", "12890"))
     uvicorn.run("main:app", host=host, port=port, reload=False)

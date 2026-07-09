@@ -3,6 +3,8 @@ import { useState, useCallback, useMemo } from 'react';
 import { api } from '@/services/api';
 import { useWebSocket, type WsEvent } from './useWebSocket';
 
+const LIVE_CONFIRM = 'I_UNDERSTAND_LIVE_RISK';
+
 export function useLiveTradingStatus() {
   return useQuery({
     queryKey: ['live-trading-status'],
@@ -27,10 +29,21 @@ export function useLiveLeaderboard(market?: string) {
   });
 }
 
+export function useLiveRiskStatus() {
+  return useQuery({
+    queryKey: ['live-risk-status'],
+    queryFn: () => api.getLiveRiskStatus(),
+    refetchInterval: 10_000,
+  });
+}
+
 export function useStartLiveTrading() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (params: Record<string, unknown>) => api.startLiveTrading(params),
+    mutationFn: (params: Record<string, unknown>) => {
+      const mode = String(params.mode || 'paper');
+      return api.startLiveTrading(params, mode === 'live' ? LIVE_CONFIRM : undefined);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['live-trading-status'] });
       qc.invalidateQueries({ queryKey: ['live-strategies'] });
@@ -52,7 +65,8 @@ export function useStopLiveTrading() {
 export function useSwitchMode() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (mode: string) => api.switchMode(mode),
+    mutationFn: (mode: string) =>
+      api.switchMode(mode, mode === 'live' ? LIVE_CONFIRM : undefined),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['live-trading-status'] });
     },
@@ -62,10 +76,45 @@ export function useSwitchMode() {
 export function useToggleStrategy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (accountId: number) => api.toggleStrategy(accountId),
+    mutationFn: (accountId: number) => api.toggleLiveStrategy(accountId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['live-strategies'] });
     },
+  });
+}
+
+export function usePlaceLiveOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: {
+      order: {
+        symbol: string;
+        exchange?: string;
+        direction: string;
+        offset?: string;
+        price: number | string;
+        volume: number;
+        strategy_id?: string;
+      };
+      live?: boolean;
+    }) => api.placeLiveOrder(args.order, args.live ? LIVE_CONFIRM : undefined),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['live-trading-status'] });
+      qc.invalidateQueries({ queryKey: ['live-risk-status'] });
+    },
+  });
+}
+
+export function useRiskProbe() {
+  return useMutation({
+    mutationFn: (params: {
+      symbol: string;
+      exchange?: string;
+      direction?: string;
+      offset?: string;
+      price?: number | string;
+      volume?: number;
+    }) => api.riskProbe(params),
   });
 }
 
@@ -83,9 +132,11 @@ export function useLiveEvents() {
 
   const { connected, send } = useWebSocket({
     url: wsUrl,
-    channels: ['position_update', 'trade_fill', 'account_update', 'strategy_status'],
+    channels: ['position_update', 'trade_fill', 'account_update', 'strategy_status', 'signal', 'risk_alert'],
     onEvent,
   });
 
   return { events, connected, send };
 }
+
+export { LIVE_CONFIRM };

@@ -22,7 +22,12 @@ from features.technical import (
 )
 
 import importlib as _importlib
-for _mod in ("features.statistical", "features.microstructure", "features.research_factors"):
+for _mod in (
+    "features.statistical",
+    "features.microstructure",
+    "features.research_factors",
+    "features.alpha_sets",
+):
     try:
         _importlib.import_module(_mod)
     except ImportError:

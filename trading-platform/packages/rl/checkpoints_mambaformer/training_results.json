@@ -1,9 +1,0 @@
-{
-  "total_return": 0.015284,
-  "final_equity": 101528.42,
-  "max_drawdown": -0.003757,
-  "sharpe_ratio": 1.3765,
-  "total_reward": 2.7699,
-  "steps": 971,
-  "model_path": "~/Polarisor/tqsdk/trading-platform/packages/rl/checkpoints_mambaformer/ppo_mambaformer_final.zip"
-}

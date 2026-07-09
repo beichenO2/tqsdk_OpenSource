@@ -27,6 +27,7 @@ import numpy as np
 
 from ..base import BaseStrategy, Signal, SignalType, StrategyConfig
 from ..indicators import calc_atr
+from ..mixins import EMASlopeRegimeMixin, SignalBalanceMixin
 from ..registry import auto_register
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def _ema(values: list[float], period: int) -> float:
 
 
 @auto_register("keltner_channel")
-class KeltnerChannelStrategy(BaseStrategy):
+class KeltnerChannelStrategy(SignalBalanceMixin, EMASlopeRegimeMixin, BaseStrategy):
     """Keltner Channel 趋势突破策略。"""
 
     def __init__(self, config: StrategyConfig) -> None:
@@ -82,6 +83,7 @@ class KeltnerChannelStrategy(BaseStrategy):
         self._lows.append(l)
         self._closes.append(c)
         self._bar_count += 1
+        self._regime_update(c)
 
         ema_period = self.get_param("ema_period", 20)
         if self._bar_count < ema_period + 5:
@@ -138,28 +140,30 @@ class KeltnerChannelStrategy(BaseStrategy):
         if not self._position_side and self._cd <= 0:
             squeeze_bonus = " squeeze!" if self._in_squeeze else ""
 
-            if c > upper:
+            if c > upper and self._regime_allow(SignalType.LONG_ENTRY) and self._sb_allow(SignalType.LONG_ENTRY):
                 sig = Signal(
                     strategy_id=self.strategy_id, symbol=symbol,
                     signal_type=SignalType.LONG_ENTRY,
                     strength=0.9 if self._in_squeeze else 0.7, price=c,
-                    reason=f"kc_break_up: c={c:.1f} upper={upper:.1f} ema={ema_val:.1f}{squeeze_bonus}",
+                    reason=f"kc_break_up: c={c:.1f} upper={upper:.1f} ema={ema_val:.1f}{squeeze_bonus} regime={self._regime()}",
                 )
                 signals.append(sig)
                 self.record_signal(sig)
+                self._sb_record(SignalType.LONG_ENTRY)
                 self._position_side = "long"
                 self._entry_price = c
                 self._hold_bars = 0
 
-            elif c < lower:
+            elif c < lower and self._regime_allow(SignalType.SHORT_ENTRY) and self._sb_allow(SignalType.SHORT_ENTRY):
                 sig = Signal(
                     strategy_id=self.strategy_id, symbol=symbol,
                     signal_type=SignalType.SHORT_ENTRY,
                     strength=0.9 if self._in_squeeze else 0.7, price=c,
-                    reason=f"kc_break_down: c={c:.1f} lower={lower:.1f} ema={ema_val:.1f}{squeeze_bonus}",
+                    reason=f"kc_break_down: c={c:.1f} lower={lower:.1f} ema={ema_val:.1f}{squeeze_bonus} regime={self._regime()}",
                 )
                 signals.append(sig)
                 self.record_signal(sig)
+                self._sb_record(SignalType.SHORT_ENTRY)
                 self._position_side = "short"
                 self._entry_price = c
                 self._hold_bars = 0

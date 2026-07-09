@@ -74,6 +74,9 @@ pythonpath = [
     "packages",
 ]
 addopts = "-v --tb=short"
+markers = [
+    "live: E2E tests requiring running gateway/API during market hours",
+]
 
 [tool.mypy]
 python_version = "3.11"

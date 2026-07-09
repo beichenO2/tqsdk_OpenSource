@@ -46,9 +46,9 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           onClick={() => onChange(tab.id)}
           onKeyDown={(e) => handleKeyDown(e, i)}
           className={cn(
-            'inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+            'inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-[12.5px] font-mono transition-colors',
             active === tab.id
-              ? 'border-brand text-brand-light'
+              ? 'border-brand text-brand'
               : 'border-transparent text-text-muted hover:text-text-secondary',
           )}
         >

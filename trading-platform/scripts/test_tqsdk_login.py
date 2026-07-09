@@ -14,7 +14,7 @@ import urllib.request
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12891").rstrip("/")
+GATEWAY_URL = os.getenv("TQSDK_GATEWAY_URL", "http://127.0.0.1:12890").rstrip("/")
 
 
 def _get(path: str) -> dict:

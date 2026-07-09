@@ -168,6 +168,43 @@ async def apply_optuna_result(
     }
 
 
+@router.post("/rollback/{strategy_name}")
+async def rollback_strategy_params(strategy_name: str) -> dict[str, Any]:
+    """回滚策略参数到上一版本（从部署历史中恢复 old_params）。"""
+    history = _load_deploy_history()
+    target = [r for r in reversed(history) if r["strategy_name"] == strategy_name]
+    if not target:
+        raise HTTPException(status_code=404, detail=f"No deploy history for {strategy_name}")
+
+    last_deploy = target[0]
+    old_params = last_deploy.get("old_params", {})
+
+    _ensure_dirs()
+    param_file = PARAMS_DIR / f"{strategy_name}.json"
+    current_params = json.loads(param_file.read_text()) if param_file.exists() else {}
+
+    if not old_params:
+        if param_file.exists():
+            param_file.unlink()
+        logger.info("Rolled back %s to empty (no prior params)", strategy_name)
+    else:
+        param_file.write_text(json.dumps(old_params, indent=2))
+
+    record = {
+        "strategy_name": strategy_name,
+        "source": "rollback",
+        "note": f"Rolled back from deploy at {last_deploy.get('deployed_at', '?')}",
+        "old_params": current_params,
+        "new_params": old_params,
+        "deployed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    history.append(record)
+    _save_deploy_history(history)
+
+    logger.info("Rolled back params for %s", strategy_name)
+    return {"status": "rolled_back", "strategy_name": strategy_name, "params": old_params}
+
+
 @router.get("/history")
 async def get_deploy_history(
     limit: int = Query(20, ge=1, le=100),

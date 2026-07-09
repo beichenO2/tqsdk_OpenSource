@@ -45,30 +45,6 @@ async def list_positions(
     ]
 
 
-@router.get("/{symbol}")
-async def get_position(
-    symbol: str,
-    svc: ExecutionService = Depends(get_execution_service),
-) -> dict:
-    """查询指定合约持仓（多空）."""
-    from core.enums.direction import Direction
-
-    long = svc.get_position(symbol, Direction.LONG)
-    short = svc.get_position(symbol, Direction.SHORT)
-
-    def pos_dict(p):
-        if p is None:
-            return {"volume": 0, "available": 0, "avg_price": "0", "float_pnl": "0"}
-        return {
-            "volume": p.volume,
-            "available": p.available,
-            "avg_price": str(p.avg_price),
-            "float_pnl": str(p.float_pnl),
-        }
-
-    return {"symbol": symbol, "long": pos_dict(long), "short": pos_dict(short)}
-
-
 @router.get("/risk/status")
 async def risk_status(
     svc: ExecutionService = Depends(get_execution_service),
@@ -94,12 +70,12 @@ async def pnl_history(
     days: int = 30,
     svc: ExecutionService = Depends(get_execution_service),
 ) -> list[dict]:
-    """查询盈亏历史（日级别）.
+    """账户权益历史快照（闭市时为上一交易区间的静止曲线）.
 
-    Returns list of {date, pnl, cumulative_pnl} for the past N days.
+    Returns list of {ts, date, pnl, float_pnl}.
     """
     try:
-        return await svc.get_pnl_history(days=days)
+        return svc.get_pnl_history(days=days)
     except (AttributeError, NotImplementedError):
         return []
 
@@ -108,5 +84,45 @@ async def pnl_history(
 async def account_info(
     svc: ExecutionService = Depends(get_execution_service),
 ) -> dict:
-    """查询账户资金信息."""
-    return await svc.get_account_info()
+    """查询账户资金信息；闭市 gateway busy 时回退最近权益快照."""
+    try:
+        return await svc.get_account_info()
+    except Exception:
+        snaps = svc.get_pnl_history(days=7)
+        if snaps:
+            last = snaps[-1]
+            return {
+                "balance": last.get("pnl", 0.0),
+                "available": 0.0,
+                "margin": 0.0,
+                "float_profit": last.get("float_pnl", 0.0),
+                "commission": 0.0,
+                "stale": True,
+                "as_of": last.get("date"),
+            }
+        raise
+
+
+# NOTE: 动态段必须放在所有静态路由之后，否则 /pnl-history 等会被吞掉
+@router.get("/{symbol}")
+async def get_position(
+    symbol: str,
+    svc: ExecutionService = Depends(get_execution_service),
+) -> dict:
+    """查询指定合约持仓（多空）."""
+    from core.enums.direction import Direction
+
+    long = svc.get_position(symbol, Direction.LONG)
+    short = svc.get_position(symbol, Direction.SHORT)
+
+    def pos_dict(p):
+        if p is None:
+            return {"volume": 0, "available": 0, "avg_price": "0", "float_pnl": "0"}
+        return {
+            "volume": p.volume,
+            "available": p.available,
+            "avg_price": str(p.avg_price),
+            "float_pnl": str(p.float_pnl),
+        }
+
+    return {"symbol": symbol, "long": pos_dict(long), "short": pos_dict(short)}
