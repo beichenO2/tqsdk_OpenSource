@@ -18,10 +18,16 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from factor.evolution import run_evolution_round
+from factor.evolution_registry import classify_candidates, register_elite_from_payload
+from factor.mcts_search import run_mcts_search
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/factors", tags=["factors"])
+
+DEFAULT_CRYPTO_DATA_DIR = None  # CryptoDataLoader 默认 ~/Downloads/crypto_data
 
 REPO = Path(__file__).resolve().parents[4]
 PACKAGES = REPO / "packages"
@@ -76,6 +82,44 @@ def _resolve_symbol_files(symbol: str) -> list[Path]:
     raw_sym = symbol.split(".")[-1] if "." in symbol else symbol
     base_sym = "".join(c for c in raw_sym if not c.isdigit()) or raw_sym
     return _futures_files(base_sym) or _crypto_files(raw_sym.lower())
+
+
+def _is_crypto_usdt(symbol: str) -> bool:
+    """全大写且 USDT 结尾视为 crypto 永续（如 BTCUSDT）。"""
+    return symbol.isupper() and symbol.endswith("USDT")
+
+
+def _load_crypto_ohlcv(
+    symbol: str,
+    limit: int = 500,
+    timeframe: str = "1h",
+    data_dir: str | None = None,
+) -> "Any":
+    """CryptoDataLoader 加载 OHLCV，index=open_time。"""
+    import pandas as pd
+    from datahub.crypto_loader import CryptoDataLoader
+
+    loader = CryptoDataLoader(data_dir or DEFAULT_CRYPTO_DATA_DIR)
+    df = loader.load(symbol, timeframe=timeframe)
+    if df.empty:
+        raise HTTPException(status_code=404, detail=f"No crypto data for symbol: {symbol}")
+    out = df.copy()
+    out["open_time"] = pd.to_datetime(out["open_time"], utc=True)
+    out = out.set_index("open_time").sort_index()
+    cols = ["open", "high", "low", "close", "volume"]
+    if not all(c in out.columns for c in cols):
+        raise HTTPException(status_code=404, detail=f"Unreadable crypto parquet for: {symbol}")
+    out = out[cols]
+    if limit and len(out) > limit:
+        out = out.iloc[-limit:]
+    return out
+
+
+def _load_evolution_ohlcv(symbol: str, limit: int = 500) -> "Any":
+    """进化 round 数据源：crypto USDT 走 CryptoDataLoader，否则期货缓存。"""
+    if _is_crypto_usdt(symbol):
+        return _load_crypto_ohlcv(symbol, limit=limit)
+    return _load_ohlcv(symbol, limit=limit)
 
 
 def _load_ohlcv(symbol: str, limit: int = 500) -> "Any":
@@ -392,13 +436,22 @@ async def analyze_cross_section_api(req: CrossSectionRequest) -> dict[str, Any]:
 class CombineRequest(BaseModel):
     symbol: str = "rb"
     factor_names: list[str] = Field(..., min_length=2)
-    method: str = Field("equal", pattern="^(equal|ic|orth)$")
+    method: str = Field("equal", pattern="^(equal|ic|orth|dynamic)$")
     limit: int = Field(400, ge=80, le=5000)
+    window: int = Field(120, ge=20, le=2000)
+    halflife: int = Field(20, ge=1, le=500)
+    horizon: int = Field(1, ge=1, le=20)
 
 
 def _combine_factors_sync(req: CombineRequest) -> dict[str, Any]:
     from factor.analysis import factor_ic, summarize_ic
-    from factor.combine import combine_equal_weight, combine_ic_weight, orthogonalize
+    from factor.combine import (
+        combine_equal_weight,
+        combine_ic_weight,
+        compare_static_vs_dynamic,
+        dynamic_combine,
+        orthogonalize,
+    )
     from factor.registry import compute_factor_frame, get_factor_meta
     import pandas as pd
 
@@ -416,16 +469,35 @@ def _combine_factors_sync(req: CombineRequest) -> dict[str, Any]:
             ic_means[name] = float(summary["ic_mean"])
 
     fdf = pd.DataFrame(cols).dropna()
+    compare: dict[str, Any] | None = None
     if req.method == "equal":
         combined = combine_equal_weight(fdf)
     elif req.method == "ic":
         combined = combine_ic_weight(fdf, ic_means)
+    elif req.method == "dynamic":
+        fwd = close.reindex(fdf.index).shift(-req.horizon) / close.reindex(fdf.index) - 1.0
+        min_periods = max(20, req.window // 2)
+        combined = dynamic_combine(
+            fdf,
+            fwd,
+            window=req.window,
+            min_periods=min_periods,
+            smoothing_halflife=req.halflife,
+        )
+        compare = compare_static_vs_dynamic(
+            fdf,
+            close.reindex(fdf.index),
+            horizon=req.horizon,
+            window=req.window,
+            min_periods=min_periods,
+            smoothing_halflife=req.halflife,
+        )
     else:
         orth = orthogonalize(fdf)
         combined = orth.mean(axis=1).rename("combined_orth")
 
     tail = combined.dropna().tail(80)
-    return {
+    out: dict[str, Any] = {
         "symbol": req.symbol,
         "method": req.method,
         "ic_means": ic_means,
@@ -437,7 +509,9 @@ def _combine_factors_sync(req: CombineRequest) -> dict[str, Any]:
             "last": float(tail.iloc[-1]) if len(tail) else None,
         },
     }
-
+    if compare is not None:
+        out["compare"] = compare
+    return out
 
 @router.post("/combine")
 async def combine_factors(req: CombineRequest) -> dict[str, Any]:
@@ -453,17 +527,20 @@ class EvolveRequest(BaseModel):
 
 
 def _evolve_factors_sync(req: EvolveRequest) -> dict[str, Any]:
-    from factor.evolution import run_evolution_round
-
-    df = _load_ohlcv(req.symbol, limit=req.limit)
+    df = _load_evolution_ohlcv(req.symbol, limit=req.limit)
     result = run_evolution_round(
         df,
         n_proposals=req.n_proposals,
         existing_exprs=req.existing_exprs,
         use_llm=req.use_llm,
     )
+    classified = classify_candidates(result)
+    registered = register_elite_from_payload(result)
     result["symbol"] = req.symbol
     result["bars"] = len(df)
+    result["elite"] = classified["elite"]
+    result["qualified"] = classified["qualified"]
+    result["registered"] = registered
     return result
 
 
@@ -471,6 +548,92 @@ def _evolve_factors_sync(req: EvolveRequest) -> dict[str, Any]:
 async def evolve_factors(req: EvolveRequest) -> dict[str, Any]:
     """一轮因子表达式进化（bandit + LLM/模板变异 + IC/去重门控）。"""
     return await asyncio.to_thread(_evolve_factors_sync, req)
+
+
+class EvolveMCTSRequest(BaseModel):
+    symbol: str = "BTCUSDT"
+    n_iterations: int = Field(50, ge=1, le=200)
+    use_llm: bool = False
+    timeframe: str = "1h"
+    limit: int = Field(5000, ge=500, le=20000)
+
+
+def _evolve_mcts_sync(req: EvolveMCTSRequest) -> dict[str, Any]:
+    if _is_crypto_usdt(req.symbol):
+        df = _load_crypto_ohlcv(req.symbol, limit=req.limit, timeframe=req.timeframe)
+    else:
+        df = _load_ohlcv(req.symbol, limit=req.limit)
+    result = run_mcts_search(
+        df,
+        n_iterations=req.n_iterations,
+        use_llm=req.use_llm,
+    )
+    classified = classify_candidates(result)
+    registered = register_elite_from_payload(result)
+    result["symbol"] = req.symbol
+    result["bars"] = len(df)
+    result["elite"] = classified["elite"]
+    result["qualified"] = classified["qualified"]
+    result["registered"] = registered
+    return result
+
+
+@router.post("/evolve-mcts")
+async def evolve_mcts_factors(req: EvolveMCTSRequest) -> dict[str, Any]:
+    """MCTS 因子表达式搜索（子树规避 + 失败经验库 + IC 门控）。"""
+    return await asyncio.to_thread(_evolve_mcts_sync, req)
+
+
+class AnalyzeCsCryptoRequest(BaseModel):
+    factor_name: str | None = None
+    expr: str | None = None
+    symbols: list[str] = Field(
+        default=["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"],
+        min_length=2,
+    )
+    timeframe: str = "1h"
+    limit: int = Field(5000, ge=80, le=20000)
+    quantiles: int = Field(5, ge=2, le=10)
+
+    @model_validator(mode="after")
+    def _factor_or_expr(self) -> "AnalyzeCsCryptoRequest":
+        if bool(self.factor_name) == bool(self.expr):
+            raise ValueError("Provide exactly one of factor_name or expr")
+        return self
+
+
+def _analyze_cs_crypto_sync(req: AnalyzeCsCryptoRequest) -> dict[str, Any]:
+    from factor.cs_pipeline import run_cs_analysis, run_cs_analysis_from_expr
+
+    data_dir = DEFAULT_CRYPTO_DATA_DIR
+    try:
+        if req.expr:
+            return run_cs_analysis_from_expr(
+                req.expr,
+                req.symbols,
+                timeframe=req.timeframe,
+                limit=req.limit,
+                quantiles=req.quantiles,
+                data_dir=data_dir,
+            )
+        return run_cs_analysis(
+            req.factor_name or "",
+            req.symbols,
+            timeframe=req.timeframe,
+            limit=req.limit,
+            quantiles=req.quantiles,
+            data_dir=data_dir,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.post("/analyze-cs-crypto")
+async def analyze_cs_crypto(req: AnalyzeCsCryptoRequest) -> dict[str, Any]:
+    """多币 crypto 截面 IC + 分位收益（CryptoDataLoader 数据源）。"""
+    return await asyncio.to_thread(_analyze_cs_crypto_sync, req)
 
 
 @router.get("/evolve/latest")

@@ -250,6 +250,8 @@ def test_register_evolved_factors_from_fake_json(tmp_path: Path) -> None:
                 "expr": "roc(close, 3)",
                 "score": 0.42,
                 "ic_mean": 0.15,
+                "ir": 0.6,
+                "dedupe_ok": True,
                 "error": None,
             },
             {

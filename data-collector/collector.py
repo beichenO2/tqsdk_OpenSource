@@ -177,8 +177,75 @@ def _get_proxy_handler() -> urllib.request.ProxyHandler | None:
     return None
 
 
+def _normalize_binance_klines(df: "pd.DataFrame") -> "pd.DataFrame":
+    """Normalize raw Binance REST kline rows to the canonical cache schema.
+
+    Canonical schema (matches ~/Downloads/crypto_data full-history files):
+    open_time(UTC), open, high, low, close, volume, close_time(UTC),
+    quote_volume, trades, taker_buy_volume, taker_buy_quote_volume.
+    """
+    import pandas as pd
+
+    df = df.rename(columns={
+        "taker_buy_base": "taker_buy_volume",
+        "taker_buy_quote": "taker_buy_quote_volume",
+    })
+    if "ignore" in df.columns:
+        df = df.drop(columns=["ignore"])
+    for col in [
+        "open", "high", "low", "close", "volume", "quote_volume",
+        "taker_buy_volume", "taker_buy_quote_volume",
+    ]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    if "trades" in df.columns:
+        df["trades"] = pd.to_numeric(df["trades"], errors="coerce").astype("int64")
+    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
+    if "close_time" in df.columns:
+        df["close_time"] = pd.to_datetime(df["close_time"], unit="ms", utc=True)
+    return df
+
+
+def _merge_incremental(existing: "pd.DataFrame", new: "pd.DataFrame") -> "pd.DataFrame":
+    """Merge new bars into existing history: dedupe on open_time, keep newest row.
+
+    Both frames must already use the canonical schema. Existing full history is
+    never truncated — only extended/updated.
+    """
+    import pandas as pd
+
+    if existing is None or existing.empty:
+        merged = new.copy()
+    else:
+        existing = existing.copy()
+        existing["open_time"] = pd.to_datetime(existing["open_time"], utc=True)
+        merged = pd.concat([existing, new], ignore_index=True)
+    merged.sort_values("open_time", inplace=True)
+    merged.drop_duplicates(subset=["open_time"], keep="last", inplace=True)
+    merged.reset_index(drop=True, inplace=True)
+    return merged
+
+
+def _atomic_write_parquet(df: "pd.DataFrame", path: Path) -> Path:
+    """Write parquet atomically, following symlinks so the real target is updated.
+
+    ``os.replace`` on a symlink path would replace the link itself and orphan
+    the target; resolve first so symlinked cache entries (→ ~/Downloads) keep
+    a single source of truth.
+    """
+    real = path.resolve() if path.exists() else path
+    tmp = real.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, real)
+    return real
+
+
 def collect_crypto_klines(symbols: list[str] | None = None, intervals: list[str] | None = None) -> int:
-    """Fetch klines from Binance REST API (no auth needed), save to Parquet.
+    """Incrementally fetch klines from Binance REST API and merge into Parquet cache.
+
+    Existing history (possibly symlinked to ~/Downloads/crypto_data full-history
+    files) is preserved and extended — never overwritten with a 500-bar window.
+    Backfills any gap since the last cached bar via paginated startTime requests.
 
     Returns the number of symbol-interval pairs successfully collected.
     """
@@ -202,31 +269,60 @@ def collect_crypto_klines(symbols: list[str] | None = None, intervals: list[str]
     else:
         opener = urllib.request.build_opener()
 
+    raw_cols = [
+        "open_time", "open", "high", "low", "close", "volume",
+        "close_time", "quote_volume", "trades", "taker_buy_base",
+        "taker_buy_quote", "ignore",
+    ]
+
+    def _fetch_page(sym: str, interval: str, start_ms: int | None) -> list:
+        url = (
+            f"https://api.binance.com/api/v3/klines?symbol={sym.upper()}"
+            f"&interval={interval}&limit=1000"
+        )
+        if start_ms is not None:
+            url += f"&startTime={start_ms}"
+        req = urllib.request.Request(url)
+        with opener.open(req, timeout=15) as resp:
+            return json.loads(resp.read())
+
     for sym in symbols:
         for interval in intervals:
             try:
-                url = f"https://api.binance.com/api/v3/klines?symbol={sym.upper()}&interval={interval}&limit=500"
-                req = urllib.request.Request(url)
-                with opener.open(req, timeout=15) as resp:
-                    data = json.loads(resp.read())
-
-                if not data:
-                    continue
-
-                df = pd.DataFrame(data, columns=[
-                    "open_time", "open", "high", "low", "close", "volume",
-                    "close_time", "quote_volume", "trades", "taker_buy_base",
-                    "taker_buy_quote", "ignore",
-                ])
-                for col in ["open", "high", "low", "close", "volume", "quote_volume"]:
-                    df[col] = pd.to_numeric(df[col])
-                df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
-
                 out_dir = CRYPTO_CACHE / sym
                 out_dir.mkdir(parents=True, exist_ok=True)
                 path = out_dir / f"{interval}.parquet"
-                df.to_parquet(path, index=False)
-                logger.info("saved %d %s bars for %s → %s", len(df), interval, sym, path)
+
+                existing = None
+                start_ms = None
+                if path.exists():
+                    existing = pd.read_parquet(path)
+                    if len(existing) > 0 and "open_time" in existing.columns:
+                        last = pd.to_datetime(existing["open_time"], utc=True).max()
+                        start_ms = int(last.timestamp() * 1000)
+
+                pages: list = []
+                # Paginated backfill from last cached bar (max 30 pages/run
+                # ≈ 30k bars to bound runtime; next run continues from there).
+                for _ in range(30):
+                    data = _fetch_page(sym, interval, start_ms)
+                    if not data:
+                        break
+                    pages.extend(data)
+                    if len(data) < 1000:
+                        break
+                    start_ms = int(data[-1][0]) + 1
+
+                if not pages:
+                    continue
+
+                new = _normalize_binance_klines(pd.DataFrame(pages, columns=raw_cols))
+                merged = _merge_incremental(existing, new)
+                real = _atomic_write_parquet(merged, path)
+                logger.info(
+                    "merged %d new %s bars for %s (total %d) → %s",
+                    len(new), interval, sym, len(merged), real,
+                )
                 collected += 1
 
             except Exception as e:

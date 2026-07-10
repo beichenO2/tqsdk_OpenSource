@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
+import re
 import sys
 import time
 import traceback
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -324,6 +326,17 @@ async def execute_run(run_id: str, background_tasks: BackgroundTasks):
     if run.status == RunStatus.RUNNING:
         raise HTTPException(409, "Run already executing")
 
+    _ensure_strategies_registered()
+    if not run.strategy_name:
+        raise HTTPException(400, "strategy_name is required to execute backtest")
+    from strategy.registry import StrategyRegistry
+
+    if StrategyRegistry.get(run.strategy_name) is None:
+        raise HTTPException(
+            404,
+            f"Strategy '{run.strategy_name}' not found in registry",
+        )
+
     run.status = RunStatus.RUNNING
     _store.save(run)
     background_tasks.add_task(_execute_backtest, run_id)
@@ -406,28 +419,115 @@ async def get_artifact_markdown(run_id: str):
     )
 
 
+_CRYPTO_SYMBOL_RE = re.compile(r"^[A-Z0-9]+USDT$")
+
+
+def _ensure_strategies_registered() -> None:
+    import strategy.futures  # noqa: F401 — trigger @auto_register
+    import strategy.btc  # noqa: F401 — trigger @auto_register
+
+
+def _is_crypto_symbol(symbol: str) -> bool:
+    return bool(_CRYPTO_SYMBOL_RE.match(symbol))
+
+
+def _crypto_df_to_futures_bars(df: "pd.DataFrame") -> "pd.DataFrame":
+    """Normalize CryptoDataLoader OHLCV to FuturesDataLoader bar schema."""
+    import pandas as pd
+
+    if df.empty:
+        return df
+    out = df.copy()
+    out["datetime"] = pd.to_datetime(out["open_time"], utc=True).dt.tz_convert(None)
+    return out
+
+
+def _load_futures_bars(symbol: str, timeframe: str) -> "pd.DataFrame":
+    from datahub.futures_loader import FuturesDataLoader
+
+    loader = FuturesDataLoader()
+    bars = loader.load_bars(symbol, timeframe)  # type: ignore[arg-type]
+    if bars.empty:
+        bars = loader.load_main_contract_bars(symbol, timeframe)  # type: ignore[arg-type]
+    return bars
+
+
+def _load_crypto_bars(symbol: str, timeframe: str) -> "pd.DataFrame":
+    from datahub.crypto_loader import CryptoDataLoader
+
+    loader = CryptoDataLoader()
+    raw = loader.load(symbol, timeframe=timeframe or "1h")
+    return _crypto_df_to_futures_bars(raw)
+
+
+def _run_symbol_backtest(
+    strategy_name: str,
+    symbol: str,
+    *,
+    timeframe: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Run one symbol backtest via futures_matrix (futures + crypto paths)."""
+    from backtest.futures_matrix import backtest_strategy_on_bars
+    from strategy.base import StrategyConfig
+    from strategy.registry import StrategyRegistry
+
+    strategy_cls = StrategyRegistry.get(strategy_name)
+    if strategy_cls is None:
+        raise KeyError(f"Strategy '{strategy_name}' not found in registry")
+
+    config = StrategyConfig(
+        name=strategy_name,
+        strategy_id=strategy_name,
+        symbols=[symbol],
+        params=params or {},
+    )
+    strategy = strategy_cls(config)
+
+    if _is_crypto_symbol(symbol):
+        # CryptoBacktestEngine needs replayer/LOB wiring; reuse futures_matrix
+        # with spot-like economics (multiplier=1, taker fee, no tick slippage).
+        bars = _load_crypto_bars(symbol, timeframe)
+        return backtest_strategy_on_bars(
+            strategy,
+            bars,
+            symbol=symbol,
+            contract_multiplier=1,
+            commission_rate=Decimal("0.0005"),
+            slippage_ticks=0,
+            tick_size=Decimal("0.01"),
+        )
+
+    bars = _load_futures_bars(symbol, timeframe)
+    return backtest_strategy_on_bars(strategy, bars, symbol=symbol)
+
+
 async def _execute_backtest(run_id: str) -> None:
-    """Background task: run backtest using existing tqsdk engine."""
+    """Background task: run backtest outside the API event loop."""
+    await asyncio.to_thread(_execute_backtest_sync, run_id)
+
+
+def _execute_backtest_sync(run_id: str) -> None:
+    """Run backtest using futures_matrix + datahub loaders (sync, thread-safe)."""
     run = _store.load(run_id)
     if not run:
         return
     try:
-        from backtest.engine import BacktestEngine
         from experiment.validation import MethodValidator
 
+        _ensure_strategies_registered()
         _publish_sse(run_id, "status_change", {"status": "running"})
 
-        engine = BacktestEngine()
         symbols = run.symbols or ["rb"]
-        results = {}
+        results: dict[str, Any] = {}
 
         for i, sym in enumerate(symbols):
             _publish_sse(run_id, "backtest_progress", {
                 "symbol": sym, "index": i + 1, "total": len(symbols),
             })
-            result = engine.run(
-                strategy_name=run.strategy_name,
-                symbol=sym,
+            result = _run_symbol_backtest(
+                run.strategy_name,
+                sym,
                 timeframe=run.timeframe,
                 params=run.config,
             )
@@ -436,26 +536,31 @@ async def _execute_backtest(run_id: str) -> None:
         agg_metrics = _aggregate_metrics(results)
         run.backtest_results = {sym: _safe_serialize(r) for sym, r in results.items()}
         run.metrics = agg_metrics
+        run.pipeline_stage = run.derive_pipeline()["pipeline_stage"]
 
         run.add_diagnostic("runtime", "backtest_complete",
                            f"Backtest completed for {len(symbols)} symbols", severity="info")
         _publish_sse(run_id, "diagnostic", {"code": "backtest_complete", "symbols": len(symbols)})
 
         validator = MethodValidator()
-        for gate_name, gate_fn in [
-            ("OOS", lambda: validator.oos_check(results)),
-            ("WF", lambda: validator.walk_forward(results)),
-        ]:
-            try:
-                gate_result = gate_fn()
-                passed = gate_result.get("passed", False)
-                run.add_validation(gate_name, passed,
-                                   gate_result.get("metrics", {}), gate_result.get("thresholds", {}))
-                _publish_sse(run_id, "validation_result", {
-                    "gate": gate_name, "passed": passed,
-                })
-            except Exception as e:
-                run.add_diagnostic("runtime", f"{gate_name}_error", str(e))
+        try:
+            report = validator.validate(
+                lambda _params, dataset: dataset,
+                run.config,
+                oos_datasets=results,
+                strategy_id=run.strategy_name,
+            )
+            run.add_validation(
+                "OOS",
+                report.passed,
+                {c.name: c.metric_value for c in report.checks},
+                {c.name: c.threshold for c in report.checks},
+            )
+            _publish_sse(run_id, "validation_result", {
+                "gate": "OOS", "passed": report.passed,
+            })
+        except Exception as e:
+            run.add_diagnostic("runtime", "OOS_error", str(e))
 
         run.status = RunStatus.COMPLETED
         run.artifact = run.build_artifact().__dict__ if hasattr(run.build_artifact(), '__dict__') else {}
@@ -478,22 +583,30 @@ async def _execute_backtest(run_id: str) -> None:
 def _aggregate_metrics(results: dict) -> dict[str, float]:
     if not results:
         return {}
-    all_sharpes = []
-    all_returns = []
-    all_dds = []
+    all_sharpes: list[float] = []
+    all_returns: list[float] = []
+    all_dds: list[float] = []
+    all_win_rates: list[float] = []
     for r in results.values():
-        if isinstance(r, dict):
+        if isinstance(r, dict) and "error" not in r:
             if "sharpe" in r:
-                all_sharpes.append(r["sharpe"])
+                all_sharpes.append(float(r["sharpe"]))
             if "total_return" in r:
-                all_returns.append(r["total_return"])
+                all_returns.append(float(r["total_return"]))
             if "max_dd" in r:
-                all_dds.append(r["max_dd"])
+                all_dds.append(float(r["max_dd"]))
+            if "win_rate" in r:
+                all_win_rates.append(float(r["win_rate"]))
+    n = len(results)
     return {
-        "avg_sharpe": sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0,
-        "avg_return": sum(all_returns) / len(all_returns) if all_returns else 0,
-        "avg_max_dd": sum(all_dds) / len(all_dds) if all_dds else 0,
-        "symbols_tested": len(results),
+        "sharpe": sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0,
+        "total_return": sum(all_returns) / len(all_returns) if all_returns else 0.0,
+        "max_dd": sum(all_dds) / len(all_dds) if all_dds else 0.0,
+        "win_rate": sum(all_win_rates) / len(all_win_rates) if all_win_rates else 0.0,
+        "avg_sharpe": sum(all_sharpes) / len(all_sharpes) if all_sharpes else 0.0,
+        "avg_return": sum(all_returns) / len(all_returns) if all_returns else 0.0,
+        "avg_max_dd": sum(all_dds) / len(all_dds) if all_dds else 0.0,
+        "symbols_tested": float(n),
     }
 
 

@@ -258,13 +258,29 @@ def propose_via_llm(
     if not llm_healthy():
         return []
 
+    failure_block = ""
+    patterns = context.get("failure_patterns") or []
+    if patterns:
+        # Negative examples from ExperienceStore for MCTS / Alpha Jungle style prompts
+        lines = []
+        for p in patterns[:8]:
+            if isinstance(p, dict):
+                lines.append(
+                    f"- reason={p.get('reason')}, example={p.get('expr')}, count={p.get('count')}"
+                )
+            else:
+                lines.append(f"- {p}")
+        failure_block = (
+            "\nAvoid the following known failure patterns:\n" + "\n".join(lines) + "\n"
+        )
+
     prompt = f"""You are a quant researcher. Propose {n} single-asset alpha factor expressions.
 Allowed tokens ONLY: open,high,low,close,volume,log,abs,sign,sqrt,maximum,minimum,
 delta,delay,ts_mean,ts_std,ts_max,ts_min,ts_rank,corr,roc,vwap and numbers/operators.
 Return JSON list of strings only, e.g. ["roc(close, 10)", "-corr(open, volume, 10)"].
-Context: {json.dumps(context)[:800]}
+Context: {json.dumps({k: v for k, v in context.items() if k != 'failure_patterns'})[:800]}
 Avoid duplicates of: {context.get('existing', [])[:15]}
-"""
+{failure_block}"""
     raw = llm_chat(
         [
             {"role": "system", "content": "Output JSON array of factor expression strings only."},
