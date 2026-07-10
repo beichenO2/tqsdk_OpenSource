@@ -32,9 +32,9 @@ async def test_portfolio_strategy_registry_and_metadata() -> None:
         params={
             "allocation_weights": {"BTCUSDT": 0.5, "ETHUSDT": 0.3, "SOLUSDT": 0.2},
             "sub_strategy_by_symbol": {
-                "BTCUSDT": "btc_mean_reversion",
-                "ETHUSDT": "btc_mean_reversion",
-                "SOLUSDT": "btc_mean_reversion",
+                "BTCUSDT": "scalp_momentum",
+                "ETHUSDT": "scalp_momentum",
+                "SOLUSDT": "scalp_momentum",
             },
             "rebalance_interval_bars": 10_000,
         },
@@ -60,9 +60,9 @@ async def test_portfolio_rebalance_emits_trim_for_overweight_long() -> None:
             "rebalance_interval_bars": 1,
             "rebalance_drift_threshold": 0.01,
             "sub_strategy_by_symbol": {
-                "BTCUSDT": "btc_mean_reversion",
-                "ETHUSDT": "btc_mean_reversion",
-                "BNBUSDT": "btc_mean_reversion",
+                "BTCUSDT": "scalp_momentum",
+                "ETHUSDT": "scalp_momentum",
+                "BNBUSDT": "scalp_momentum",
             },
         },
     )
@@ -90,10 +90,11 @@ async def test_ensemble_vote_produces_signal_when_children_align() -> None:
             "ensemble_mode": "vote",
             "action_threshold": 0.34,
             "sub_strategy_weights": [0.34, 0.33, 0.33],
+            # btc_trend_following/btc_multifactor/btc_momentum archived in 260505
             "sub_strategy_types": (
-                "btc_trend_following",
-                "btc_multifactor",
-                "btc_momentum",
+                "time_series_momentum",
+                "scalp_momentum",
+                "vol_breakout_scalp",
             ),
         },
     )

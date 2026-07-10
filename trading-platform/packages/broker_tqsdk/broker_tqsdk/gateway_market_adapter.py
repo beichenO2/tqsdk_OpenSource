@@ -74,6 +74,13 @@ class TqGatewayMarketAdapter:
             return []
         bars: list[Bar] = []
         for row in rows:
+            # Right after gateway (re)start the newest kline rows may carry
+            # null/NaN OHLC before TqSdk fills them in — skip instead of 500.
+            ohlc = [row.get(k) for k in ("open", "high", "low", "close")]
+            if row.get("datetime") is None or any(
+                v is None or v != v for v in ohlc
+            ):
+                continue
             bars.append(
                 Bar(
                     symbol=symbol,

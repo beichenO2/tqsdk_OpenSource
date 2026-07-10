@@ -178,6 +178,64 @@ class TqSdkSession:
             self._api.cancel_order(order_id)
             return True
 
+    @staticmethod
+    def _serialize_order(order: Any) -> dict[str, Any]:
+        volume_orign = int(order.volume_orign)
+        volume_left = int(order.volume_left)
+        filled_volume = volume_orign - volume_left
+        trade_price = float(order.trade_price) if order.trade_price == order.trade_price else 0.0
+        return {
+            "order_id": str(order.order_id),
+            "symbol": f"{order.exchange_id}.{order.instrument_id}",
+            "direction": str(order.direction),
+            "offset": str(order.offset),
+            "status": str(order.status),
+            "volume": volume_orign,
+            "filled_volume": filled_volume,
+            "volume_left": volume_left,
+            "limit_price": float(order.limit_price),
+            "avg_price": trade_price,
+            "last_msg": str(order.last_msg or ""),
+            "is_error": bool(getattr(order, "is_error", False)),
+        }
+
+    def get_orders(self) -> list[dict[str, Any]]:
+        with self._locked():
+            if self._api is None:
+                raise RuntimeError("TqSdk not connected")
+            orders = self._api.get_order()
+            return [self._serialize_order(o) for o in orders.values()]
+
+    def get_order(self, order_id: str) -> dict[str, Any] | None:
+        with self._locked():
+            if self._api is None:
+                raise RuntimeError("TqSdk not connected")
+            order = self._api.get_order(order_id=order_id)
+            if order is None:
+                return None
+            if not str(getattr(order, "order_id", "") or ""):
+                return None
+            return self._serialize_order(order)
+
+    def get_trades(self) -> list[dict[str, Any]]:
+        with self._locked():
+            if self._api is None:
+                raise RuntimeError("TqSdk not connected")
+            trades = self._api.get_trade()
+            result: list[dict[str, Any]] = []
+            for trade in trades.values():
+                result.append({
+                    "trade_id": str(trade.trade_id),
+                    "order_id": str(trade.order_id),
+                    "symbol": f"{trade.exchange_id}.{trade.instrument_id}",
+                    "direction": str(trade.direction),
+                    "offset": str(trade.offset),
+                    "price": float(trade.price),
+                    "volume": int(trade.volume),
+                    "trade_date_time": int(trade.trade_date_time),
+                })
+            return result
+
     def get_quote(self, symbol: str) -> dict[str, Any]:
         with self._locked():
             if self._api is None:

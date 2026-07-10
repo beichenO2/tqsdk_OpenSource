@@ -132,7 +132,7 @@ export function useLiveEvents() {
 
   const { connected, send } = useWebSocket({
     url: wsUrl,
-    channels: ['position_update', 'trade_fill', 'account_update', 'strategy_status', 'signal', 'risk_alert'],
+    channels: ['position_update', 'trade_fill', 'account_update', 'strategy_status', 'signal_generated', 'risk_alert'],
     onEvent,
   });
 

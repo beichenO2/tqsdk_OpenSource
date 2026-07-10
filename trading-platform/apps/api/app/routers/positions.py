@@ -58,11 +58,8 @@ async def close_all_positions(
     svc: ExecutionService = Depends(get_execution_service),
 ) -> dict:
     """平掉所有持仓."""
-    try:
-        result = await svc.close_all_positions()
-        return {"status": "ok", "closed": result}
-    except AttributeError:
-        return {"status": "ok", "closed": 0, "message": "close_all not yet implemented"}
+    result = await svc.close_all_positions()
+    return {"status": "ok", "closed": result}
 
 
 @router.get("/pnl-history")

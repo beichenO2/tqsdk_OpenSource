@@ -109,6 +109,36 @@ def cancel_order(order_id: str) -> dict:
     return {"cancelled": ok, "order_id": order_id}
 
 
+@app.get("/api/v1/orders")
+def list_orders() -> dict:
+    session = _require_session()
+    try:
+        return {"items": session.get_orders()}
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/orders/{order_id}")
+def get_order(order_id: str) -> dict:
+    session = _require_session()
+    try:
+        order = session.get_order(order_id)
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+    return order
+
+
+@app.get("/api/v1/trades")
+def list_trades() -> dict:
+    session = _require_session()
+    try:
+        return {"items": session.get_trades()}
+    except SessionBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/api/v1/market/quote/{symbol}")
 def quote(symbol: str) -> dict:
     session = _require_session()

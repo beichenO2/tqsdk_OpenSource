@@ -24,45 +24,50 @@ export function useWebSocket({
   const wsRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<WsEvent | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const connect = useCallback(() => {
     if (!enabled) return;
-    try {
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
 
-      ws.onopen = () => {
-        setConnected(true);
-        for (const ch of channels) {
-          ws.send(JSON.stringify({ action: 'subscribe', channel: ch }));
-        }
-      };
+    const openSocket = () => {
+      try {
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as WsEvent;
-          setLastEvent(data);
-          onEvent?.(data);
-        } catch { /* ignore non-JSON */ }
-      };
+        ws.onopen = () => {
+          setConnected(true);
+          for (const ch of channels) {
+            ws.send(JSON.stringify({ action: 'subscribe', channel: ch }));
+          }
+        };
 
-      ws.onclose = () => {
-        setConnected(false);
-        wsRef.current = null;
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as WsEvent;
+            setLastEvent(data);
+            onEvent?.(data);
+          } catch { /* ignore non-JSON */ }
+        };
+
+        ws.onclose = () => {
+          setConnected(false);
+          wsRef.current = null;
+          if (enabled) {
+            reconnectTimer.current = setTimeout(openSocket, reconnectInterval);
+          }
+        };
+
+        ws.onerror = () => {
+          ws.close();
+        };
+      } catch {
         if (enabled) {
-          reconnectTimer.current = setTimeout(connect, reconnectInterval);
+          reconnectTimer.current = setTimeout(openSocket, reconnectInterval);
         }
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-    } catch {
-      if (enabled) {
-        reconnectTimer.current = setTimeout(connect, reconnectInterval);
       }
-    }
+    };
+
+    openSocket();
   }, [url, channels, onEvent, reconnectInterval, enabled]);
 
   useEffect(() => {

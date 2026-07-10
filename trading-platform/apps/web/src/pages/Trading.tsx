@@ -10,6 +10,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { SearchInput } from '@/components/ui/SearchInput';
 import Card from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
+import KLineChart from '@/components/charts/KLineChart';
 import { fmt, fmtCny } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import type { Quote, Order } from '@/types';
@@ -314,6 +315,10 @@ export default function Trading() {
           </Card>
         </div>
       </div>
+
+      {selectedQuote && (
+        <KLineChart symbol={selectedQuote.instrument_id} height={380} />
+      )}
 
       {/* Bottom: Positions / Orders with working tabs */}
       <div>

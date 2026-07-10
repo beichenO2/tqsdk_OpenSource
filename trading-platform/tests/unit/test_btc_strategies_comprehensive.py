@@ -17,6 +17,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytest.skip(
+    "strategy.btc legacy strategies (crypto_ml/grid/mean_reversion/momentum/"
+    "multifactor/onchain/trend_following) were archived to _archived/ in the "
+    "260505 refactor; this suite targets the archived code",
+    allow_module_level=True,
+)
+
 # Register all BTC strategies on the global registry
 import strategy.btc.crypto_ml_strategy  # noqa: E402, F401
 import strategy.btc.ensemble_strategy  # noqa: E402, F401

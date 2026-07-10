@@ -24,3 +24,13 @@ export function useRiskAlerts() {
     refetchInterval: 10_000,
   });
 }
+
+export function useKlines(symbol: string | null, duration: number, limit = 200) {
+  return useQuery({
+    queryKey: ['klines', symbol, duration, limit],
+    queryFn: () => api.getKlines(symbol!, duration, limit),
+    enabled: !!symbol,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+}

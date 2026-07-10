@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -12,7 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from core.exceptions import MLUnavailableError, ModelNotFoundError
+from core.exceptions import MLUnavailableError, ModelNotFoundError, TradingPlatformError
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ except ImportError as exc:
 router = APIRouter(prefix="/ml", tags=["ml"])
 
 MODEL_DIR = os.environ.get("ML_MODEL_DIR", "models")
+ML_TRAIN_TIMEOUT_S = int(os.environ.get("ML_TRAIN_TIMEOUT_S", "600"))
 
 FEATURE_COLUMNS = [
     "open", "high", "low", "close", "volume",
@@ -92,163 +95,109 @@ def _require_ml() -> None:
         )
 
 
-def _load_training_ohlcv(n_bars: int) -> dict[str, Any]:
-    """Load real OHLCV data from parquet for ML training."""
-    import numpy as np
-    import pandas as pd
-    from pathlib import Path
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
 
-    repo = Path(__file__).resolve().parents[3]
-    search_dirs = [
-        repo / "data" / "futures_cache",
-        repo / "data" / "crypto_cache",
-        repo / ".cache" / "bars",
+
+def _worker_env() -> dict[str, str]:
+    repo = _repo_root()
+    paths = [
+        str(repo),
+        str(repo / "apps" / "api"),
+        str(repo / "packages" / "core"),
+        str(repo / "packages"),
+    ]
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH", "")
+    if existing:
+        paths.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(paths)
+    return env
+
+
+def _build_train_worker_cmd(req: TrainRequest) -> list[str]:
+    return [
+        sys.executable,
+        "-m",
+        "apps.worker.train_ml",
+        "--parquet",
+        "--api-json",
+        "--framework",
+        "xgboost",
+        "--bars",
+        str(req.n_bars),
+        "--model-dir",
+        MODEL_DIR,
+        "--train-ratio",
+        str(req.train_ratio),
+        "--val-ratio",
+        str(req.val_ratio),
+        "--max-depth",
+        str(req.max_depth),
+        "--n-estimators",
+        str(req.n_estimators),
+        "--lr",
+        str(req.learning_rate),
+        "--subsample",
+        str(req.subsample),
+        "--volatility-window",
+        str(req.volatility_window),
+        "--volume-ma-period",
+        str(req.volume_ma_period),
     ]
 
-    for d in search_dirs:
-        if not d.exists():
-            continue
-        for fp in sorted(d.glob("**/*.parquet")):
-            try:
-                df = pd.read_parquet(fp)
-                if not {"open", "high", "low", "close", "volume"}.issubset(df.columns):
-                    continue
-                if len(df) < n_bars:
-                    continue
-                df = df.tail(n_bars).reset_index(drop=True)
-                return {
-                    "open": df["open"].to_numpy(dtype=np.float64),
-                    "high": df["high"].to_numpy(dtype=np.float64),
-                    "low": df["low"].to_numpy(dtype=np.float64),
-                    "close": df["close"].to_numpy(dtype=np.float64),
-                    "volume": df["volume"].to_numpy(dtype=np.float64),
-                }
-            except Exception as exc:
-                logger.debug("Skipping data file %s: %s", fp, exc)
-                continue
 
-    from core.exceptions import DataNotAvailableError
-    raise DataNotAvailableError(
-        f"No parquet file with >= {n_bars} bars found in {[str(d) for d in search_dirs]}"
+async def _run_train_subprocess(req: TrainRequest) -> dict[str, Any]:
+    """Spawn isolated worker subprocess — keeps OpenMP runtimes out of API process."""
+    cmd = _build_train_worker_cmd(req)
+    env = _worker_env()
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+        cwd=str(_repo_root()),
     )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=ML_TRAIN_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise TradingPlatformError(
+            f"ML training timed out after {ML_TRAIN_TIMEOUT_S}s",
+            code="ML_TRAIN_TIMEOUT",
+            status_code=504,
+        )
 
+    if proc.returncode != 0:
+        stderr_text = stderr.decode("utf-8", errors="replace")
+        raise TradingPlatformError(
+            "ML training worker failed",
+            code="ML_TRAIN_FAILED",
+            status_code=500,
+            detail={"stderr": stderr_text[-2000:]},
+        )
 
-def _compute_features(ohlcv: dict[str, Any], vol_w: int, vma_p: int) -> Any:
-    import numpy as np
-
-    closes = ohlcv["close"]
-    volumes = ohlcv["volume"]
-    n = len(closes)
-
-    returns = np.zeros(n)
-    returns[1:] = np.diff(closes) / np.where(closes[:-1] != 0, closes[:-1], 1.0)
-
-    volatility = np.zeros(n)
-    for i in range(vol_w + 1, n):
-        volatility[i] = np.std(returns[i - vol_w: i])
-
-    volume_ratio = np.ones(n)
-    for i in range(vma_p, n):
-        vma = np.mean(volumes[i - vma_p: i])
-        volume_ratio[i] = volumes[i] / vma if vma > 0 else 1.0
-
-    return np.column_stack([
-        ohlcv["open"], ohlcv["high"], ohlcv["low"], closes, volumes,
-        returns, volatility, volume_ratio,
-    ])
+    try:
+        return json.loads(stdout.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        stdout_text = stdout.decode("utf-8", errors="replace")
+        raise TradingPlatformError(
+            "ML training worker returned invalid JSON",
+            code="ML_TRAIN_FAILED",
+            status_code=500,
+            detail={"stdout_tail": stdout_text[-2000:], "parse_error": str(exc)},
+        ) from exc
 
 
 @router.post("/train", response_model=TrainResponse)
 async def train_model(req: TrainRequest) -> TrainResponse:
     _require_ml()
-    import numpy as np
-
-    assert XGBoostModel is not None
-    assert MLModelMeta is not None
-    assert MLFramework is not None
-
-    ohlcv = _load_training_ohlcv(req.n_bars)
-    warmup = max(req.volatility_window, req.volume_ma_period) + 2
-    X_all = _compute_features(ohlcv, req.volatility_window, req.volume_ma_period)
-
-    closes = ohlcv["close"]
-    y_all = np.zeros(len(closes), dtype=np.int32)
-    y_all[:-1] = (closes[1:] > closes[:-1]).astype(np.int32)
-
-    X_all = X_all[warmup:-1]
-    y_all = y_all[warmup:-1]
-    n = len(X_all)
-
-    n_train = int(n * req.train_ratio)
-    n_val = int(n * req.val_ratio)
-    X_train, y_train = X_all[:n_train], y_all[:n_train]
-    X_val, y_val = X_all[n_train:n_train + n_val], y_all[n_train:n_train + n_val]
-    X_test, y_test = X_all[n_train + n_val:], y_all[n_train + n_val:]
-
-    model_id = f"xgb_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    hyperparams = {
-        "max_depth": req.max_depth,
-        "n_estimators": req.n_estimators,
-        "learning_rate": req.learning_rate,
-        "subsample": req.subsample,
-        "colsample_bytree": 0.8,
-        "eval_metric": "logloss",
-        "objective": "binary:logistic",
-    }
-
-    meta = MLModelMeta(
-        model_id=model_id,
-        name="XGBoost Price Direction",
-        framework=MLFramework.XGBOOST,
-        feature_columns=list(FEATURE_COLUMNS),
-        target_column="direction",
-        hyperparams=hyperparams,
-    )
-
-    model = XGBoostModel(meta)
-    train_result = await model.train(X_train, y_train, X_val, y_val)
-    test_metrics = model.evaluate(X_test, y_test)
-
-    Path(MODEL_DIR).mkdir(parents=True, exist_ok=True)
-    model_path = os.path.join(MODEL_DIR, f"{model_id}.json")
-    model.save(model_path)
-
-    fi = model.get_feature_importance()
-
-    data_info = {
-        "source": f"parquet ({req.n_bars} bars)",
-        "total_samples": n,
-        "train_size": len(X_train),
-        "val_size": len(X_val),
-        "test_size": len(X_test),
-    }
-
-    report = {
-        "model_id": model_id,
-        "trained_at": datetime.now(timezone.utc).isoformat(),
-        "hyperparams": hyperparams,
-        "data_info": data_info,
-        "train_result": train_result.model_dump(),
-        "test_metrics": test_metrics,
-        "feature_columns": FEATURE_COLUMNS,
-    }
-    report_path = os.path.join(MODEL_DIR, f"{model_id}_report.json")
-    with open(report_path, "w") as f:
-        json.dump(report, f, indent=2, default=str)
-
-    _loaded_models[model_id] = model
-
-    return TrainResponse(
-        model_id=model_id,
-        model_path=model_path,
-        report_path=report_path,
-        train_accuracy=train_result.train_score,
-        val_accuracy=train_result.val_score,
-        test_metrics=test_metrics,
-        feature_importance=fi,
-        duration_seconds=train_result.duration_seconds,
-        data_info=data_info,
-    )
+    result = await _run_train_subprocess(req)
+    return TrainResponse(**result)
 
 
 @router.get("/models", response_model=list[ModelInfo])

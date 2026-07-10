@@ -94,14 +94,14 @@ export default function HealthPage() {
                 {String(components.tqsdk_gateway?.url || '—')}
               </span>
             </div>
-            {components.tqsdk_gateway?.body && (
+            {components.tqsdk_gateway?.body != null ? (
               <pre className="text-[11px] text-text-muted bg-surface-tertiary rounded-lg p-2 overflow-auto max-h-24">
                 {String(components.tqsdk_gateway.body)}
               </pre>
-            )}
-            {components.tqsdk_gateway?.error && (
+            ) : null}
+            {components.tqsdk_gateway?.error != null ? (
               <p className="text-xs text-loss">{String(components.tqsdk_gateway.error)}</p>
-            )}
+            ) : null}
           </div>
         </Card>
       </div>

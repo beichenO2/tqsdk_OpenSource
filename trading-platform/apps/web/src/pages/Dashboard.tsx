@@ -42,7 +42,7 @@ export default function Dashboard() {
   const { data: liveStatus } = useLiveTradingStatus() as { data: Record<string, unknown> | undefined };
   const startLive = useStartLiveTrading();
   const stopLive = useStopLiveTrading();
-  const { events: liveEvents, connected: wsConnected } = useLiveEvents();
+  const { connected: wsConnected } = useLiveEvents();
   const liveRunning = !!(liveStatus as Record<string, unknown>)?.running;
   const liveMode = String((liveStatus as Record<string, unknown>)?.mode || 'paper');
 
@@ -96,7 +96,7 @@ export default function Dashboard() {
     });
     if (!ok) return;
     try { await closeAll.mutateAsync(); toast.success('已提交平仓指令'); }
-    catch { toast.error('平仓失败'); }
+    catch (e) { toast.error(e instanceof Error ? e.message : '平仓失败'); }
   };
 
   const handlePauseAll = async () => {
@@ -108,7 +108,7 @@ export default function Dashboard() {
     });
     if (!ok) return;
     try { await pauseAll.mutateAsync(); toast.success('所有策略已暂停'); }
-    catch { toast.error('暂停失败'); }
+    catch (e) { toast.error(e instanceof Error ? e.message : '暂停失败'); }
   };
 
   const runningStrategies = strategies.filter((s) => s.status === 'RUNNING').length;

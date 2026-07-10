@@ -1,5 +1,6 @@
 # Core
 fastapi>=0.115
+python-multipart>=0.0.20  # FastAPI form/file upload parsing (research upload API)
 uvicorn[standard]>=0.32
 pydantic>=2.9
 pydantic-settings>=2.6
@@ -24,7 +25,6 @@ tqsdk==3.9.2
 gymnasium>=1.0
 torch>=2.5
 xgboost>=2.1
-lightgbm>=4.5
 stable-baselines3>=2.4
 optuna>=4.1
 

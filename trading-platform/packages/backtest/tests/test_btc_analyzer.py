@@ -10,9 +10,13 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock
 
-# Stub out the strategy package so btc.engine doesn't fail on import
-sys.modules.setdefault("strategy", MagicMock())
-sys.modules.setdefault("strategy.base", MagicMock())
+# Stub the strategy package only when the real one is unavailable; unconditional
+# stubbing poisons sys.modules for other test modules collected in the same run.
+try:
+    import strategy.base  # noqa: F401
+except Exception:
+    sys.modules.setdefault("strategy", MagicMock())
+    sys.modules.setdefault("strategy.base", MagicMock())
 
 # Ensure the backtest package root is importable
 _pkg_root = Path(__file__).resolve().parent.parent

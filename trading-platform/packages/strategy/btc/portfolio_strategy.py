@@ -202,11 +202,12 @@ class PortfolioStrategy(BaseStrategy):
 
 
 def _load_child_strategy_modules_for_registry() -> None:
-    """Ensure active strategy modules are imported for registry registration."""
-    from . import meta_labeling as _meta  # noqa: F401
+    """Ensure active strategy modules are imported for registry registration.
+
+    meta_labeling / patch_tst_strategy moved to _archived — do not import here.
+    """
     from . import funding_rate_alpha as _funding  # noqa: F401
     from . import cross_sectional_momentum as _momentum  # noqa: F401
-    from . import patch_tst_strategy as _patch  # noqa: F401
     from . import funding_meta_ensemble as _ensemble  # noqa: F401
 
 

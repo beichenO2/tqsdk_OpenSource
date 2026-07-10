@@ -1,6 +1,6 @@
 import type {
   Quote, Position, Order, AccountInfo,
-  Strategy, BacktestResult, RiskAlert,
+  Strategy, BacktestResult, RiskAlert, KlineBar,
 } from '@/types';
 import { deriveMockTradesFromEquity } from '@/utils/backtestDerived';
 
@@ -168,6 +168,30 @@ function toQuote(t: BackendTick, exchange: string): Quote {
   };
 }
 
+interface BackendBar {
+  symbol: string;
+  datetime: string;
+  open: string | number;
+  high: string | number;
+  low: string | number;
+  close: string | number;
+  volume: number;
+  open_interest?: number | null;
+  duration_seconds?: number;
+}
+
+function toKlineBar(b: BackendBar): KlineBar {
+  const time = Math.floor(new Date(b.datetime).getTime() / 1000);
+  return {
+    time,
+    open: Number(b.open),
+    high: Number(b.high),
+    low: Number(b.low),
+    close: Number(b.close),
+    volume: Number(b.volume ?? 0),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Cached instrument list so we don't refetch every cycle
 // ---------------------------------------------------------------------------
@@ -283,6 +307,16 @@ export const api = {
       .filter((q): q is Quote => q !== null);
   },
 
+  getKlines: async (symbol: string, duration = 300, limit = 200): Promise<KlineBar[]> => {
+    const raw = await request<BackendBar[]>(
+      `/market/klines/${encodeURIComponent(symbol)}?duration=${duration}&limit=${limit}`,
+    );
+    return raw
+      .map(toKlineBar)
+      .filter((b) => b.time > 0 && Number.isFinite(b.close))
+      .sort((a, b) => a.time - b.time);
+  },
+
   getPositions: async (): Promise<Position[]> => {
     try {
       const raw = await request<BackendPosition[]>('/positions');
@@ -361,11 +395,7 @@ export const api = {
   },
 
   closeAllPositions: async (): Promise<void> => {
-    try {
-      await request('/positions/close-all', { method: 'POST' });
-    } catch {
-      // endpoint not yet implemented
-    }
+    await request('/positions/close-all', { method: 'POST' });
   },
 
   startStrategy: async (id: string): Promise<Strategy> => {
@@ -385,11 +415,7 @@ export const api = {
   },
 
   pauseAllStrategies: async (): Promise<void> => {
-    try {
-      await request('/strategies/pause-all', { method: 'POST' });
-    } catch {
-      // endpoint not yet implemented
-    }
+    await request('/strategies/pause-all', { method: 'POST' });
   },
 
   createBacktest: async (params: {
@@ -503,6 +529,106 @@ export const api = {
       `/research/runs/${runId}/factor-snapshot`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  updateResearchRun: (
+    runId: string,
+    body: { status?: string; notes?: string; tags?: string[]; metrics?: Record<string, number> },
+  ) =>
+    request<{ ok: boolean; run_id: string }>(`/research/runs/${runId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteResearchRun: (runId: string) =>
+    request<{ ok: boolean }>(`/research/runs/${runId}`, { method: 'DELETE' }),
+  getResearchArtifact: (runId: string) =>
+    request<Record<string, unknown>>(`/research/runs/${runId}/artifact`),
+  getResearchArtifactMarkdown: async (runId: string): Promise<string> => {
+    const res = await fetch(`${API_BASE}/research/runs/${runId}/artifact/markdown`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`API ${res.status}: ${body || res.statusText}`);
+    }
+    return res.text();
+  },
+
+  // Deploy
+  getDeployParams: (strategyName: string) =>
+    request<{ strategy_name: string; params: Record<string, unknown>; deployed: boolean }>(
+      `/deploy/params/${encodeURIComponent(strategyName)}`,
+    ),
+  deployParams: (
+    strategyName: string,
+    body: { params: Record<string, unknown>; source?: string; note?: string },
+  ) =>
+    request<{ status: string; strategy_name: string; params: Record<string, unknown> }>(
+      `/deploy/params/${encodeURIComponent(strategyName)}`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+  getOptunaBest: (market?: string, topN = 10) => {
+    const qs = new URLSearchParams({ top_n: String(topN) });
+    if (market) qs.set('market', market);
+    return request<Record<string, unknown>[]>(`/deploy/optuna-best?${qs}`);
+  },
+  applyOptunaResult: (studyName: string, strategyName?: string) => {
+    const qs = strategyName ? `?strategy_name=${encodeURIComponent(strategyName)}` : '';
+    return request<{ status: string; strategy_name: string; source: string; params: Record<string, unknown> }>(
+      `/deploy/apply-optuna/${encodeURIComponent(studyName)}${qs}`,
+      { method: 'POST' },
+    );
+  },
+  rollbackDeploy: (strategyName: string) =>
+    request<{ status: string; strategy_name: string; params: Record<string, unknown> }>(
+      `/deploy/rollback/${encodeURIComponent(strategyName)}`,
+      { method: 'POST' },
+    ),
+  getDeployHistory: (limit = 20) =>
+    request<Record<string, unknown>[]>(`/deploy/history?limit=${limit}`),
+
+  // Explain
+  listExplainTimelines: (symbol: string, start: string, end: string) => {
+    const qs = new URLSearchParams({ symbol, start, end });
+    return request<{
+      trade_id: string;
+      symbol: string;
+      entries: { timestamp: string; event_type: string; data: Record<string, unknown>; metadata: Record<string, unknown> }[];
+    }[]>(`/explain?${qs}`);
+  },
+  getExplainTimeline: (tradeId: string) =>
+    request<{
+      trade_id: string;
+      symbol: string;
+      entries: { timestamp: string; event_type: string; data: Record<string, unknown>; metadata: Record<string, unknown> }[];
+    }>(`/explain/${encodeURIComponent(tradeId)}/timeline`),
+  getExplainFactors: (tradeId: string) =>
+    request<{
+      trade_id: string;
+      symbol: string;
+      factors: { factor: string; weight: number; source: string }[];
+    }>(`/explain/${encodeURIComponent(tradeId)}/factors`),
+  getExplainGraph: (tradeId: string) =>
+    request<{
+      trade_id: string;
+      symbol: string;
+      root: { id: string; label: string; event_type: string; children: unknown[] };
+    }>(`/explain/${encodeURIComponent(tradeId)}/graph`),
+
+  // ML
+  trainMlModel: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/ml/train', { method: 'POST', body: JSON.stringify(body) }),
+  listMlModels: () =>
+    request<{ model_id: string; model_path: string; report: Record<string, unknown> | null }[]>('/ml/models'),
+  getMlModel: (modelId: string) =>
+    request<{ model_id: string; model_path: string; report: Record<string, unknown> | null }>(
+      `/ml/models/${encodeURIComponent(modelId)}`,
+    ),
+  predictMl: (body: { model_id: string; features: Record<string, number> }) =>
+    request<{
+      prediction: number;
+      probability_up: number;
+      probability_down: number;
+      feature_importance?: Record<string, number>;
+    }>('/ml/predict', { method: 'POST', body: JSON.stringify(body) }),
 
   // MCP
   getMcpTools: () =>
@@ -513,6 +639,22 @@ export const api = {
   // Settings
   getSettings: () =>
     request<Record<string, unknown>>('/settings'),
+  getSettingsSection: (section: string) =>
+    request<Record<string, unknown>>(`/settings/${encodeURIComponent(section)}`),
+  replaceSettingsSection: (section: string, body: Record<string, unknown>) =>
+    request<{ ok: boolean; section: string }>(`/settings/${encodeURIComponent(section)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  patchSetting: (path: string, value: unknown) =>
+    request<{ ok: boolean; path: string; old_value: unknown; new_value: unknown }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ path, value }),
+    }),
+  resetSettings: () =>
+    request<{ ok: boolean; settings: Record<string, unknown> }>('/settings/reset', {
+      method: 'POST',
+    }),
 
   // Live trading
   getLiveTradingStatus: () =>

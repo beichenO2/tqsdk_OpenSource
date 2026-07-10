@@ -20,6 +20,15 @@ export interface Quote {
   datetime: string;
 }
 
+export interface KlineBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
 export interface Position {
   instrument_id: string;
   exchange: string;

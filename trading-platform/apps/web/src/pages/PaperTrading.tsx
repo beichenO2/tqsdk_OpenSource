@@ -8,7 +8,6 @@ import { useLiveTradingStatus, useStartLiveTrading, useStopLiveTrading, useSwitc
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
-import { cn } from '@/lib/cn';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';

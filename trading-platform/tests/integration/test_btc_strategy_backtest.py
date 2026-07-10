@@ -10,6 +10,12 @@ from decimal import Decimal
 
 import pytest
 
+pytest.skip(
+    "strategy.btc.momentum / trend_following were archived to _archived/ in the "
+    "260505 refactor; this suite targets the archived code",
+    allow_module_level=True,
+)
+
 from btc import (
     BTCBacktestEngine,
     DataReplayer,

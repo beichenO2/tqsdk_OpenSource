@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 import time
+import warnings
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -17,6 +20,8 @@ from .base import (
     TrainResult,
 )
 
+logger = logging.getLogger(__name__)
+
 _DEFAULT_HYPERPARAMS: dict[str, Any] = {
     "max_depth": 6,
     "n_estimators": 200,
@@ -30,13 +35,8 @@ _DEFAULT_HYPERPARAMS: dict[str, Any] = {
     "verbosity": -1,
 }
 
-try:
-    import lightgbm as lgb
-except Exception as _e:
-    lgb = None  # type: ignore[assignment]
-    _LGB_IMPORT_ERROR = _e
-else:
-    _LGB_IMPORT_ERROR = None
+_lgb_module: Any | None = None
+_LGB_IMPORT_ERROR: Exception | None = None
 
 try:
     from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -49,11 +49,19 @@ else:
 
 
 def _require_lgb() -> Any:
-    if lgb is None:
+    """Lazy-import lightgbm — module import must not pull OpenMP into API process."""
+    global _lgb_module, _LGB_IMPORT_ERROR
+    if _lgb_module is not None:
+        return _lgb_module
+    try:
+        import lightgbm as lgb
+    except Exception as exc:
+        _LGB_IMPORT_ERROR = exc
         raise ImportError(
             f"lightgbm is required. Install with: pip install lightgbm. "
-            f"Original error: {_LGB_IMPORT_ERROR!r}"
-        ) from _LGB_IMPORT_ERROR
+            f"Original error: {exc!r}"
+        ) from exc
+    _lgb_module = lgb
     return lgb
 
 
@@ -74,12 +82,13 @@ class LightGBMModel(BaseMLModel):
         merged_hp = {**_DEFAULT_HYPERPARAMS, **meta.hyperparams}
         meta = meta.model_copy(update={"hyperparams": merged_hp})
         super().__init__(meta)
-        _require_lgb()
 
-    def _build_estimator(self) -> Any:
-        _require_lgb()
+    def _build_estimator(self, *, n_jobs: Optional[int] = None) -> Any:
+        lgb = _require_lgb()
         hp = dict(self.meta.hyperparams)
         hp.pop("metric", None)
+        if n_jobs is not None:
+            hp["n_jobs"] = n_jobs
         return lgb.LGBMClassifier(**hp)
 
     async def train(
@@ -88,13 +97,26 @@ class LightGBMModel(BaseMLModel):
         y_train: np.ndarray,
         X_val: Optional[np.ndarray] = None,
         y_val: Optional[np.ndarray] = None,
+        n_jobs: Optional[int] = None,
     ) -> TrainResult:
-        _require_lgb()
+        lgb = _require_lgb()
         _require_sklearn()
+
+        effective_n_jobs = n_jobs
+        if "torch" in sys.modules:
+            effective_n_jobs = 1
+            warnings.warn(
+                "torch is already loaded in this process; forcing LightGBM n_jobs=1 "
+                "to reduce OpenMP conflict risk. Run training in an isolated subprocess.",
+                stacklevel=2,
+            )
+            logger.warning(
+                "torch detected in sys.modules — LightGBM n_jobs forced to 1 (OpenMP guard)"
+            )
 
         self.meta.status = MLModelStatus.TRAINING
         t0 = time.perf_counter()
-        self._model = self._build_estimator()
+        self._model = self._build_estimator(n_jobs=effective_n_jobs)
 
         try:
             fit_kwargs: dict[str, Any] = {}
@@ -177,7 +199,7 @@ class LightGBMModel(BaseMLModel):
     def load(self, path: str) -> None:
         import json as _json
         from pathlib import Path
-        _require_lgb()
+        lgb = _require_lgb()
         self._model = self._build_estimator()
         booster = lgb.Booster(model_file=path)
         self._model._Booster = booster

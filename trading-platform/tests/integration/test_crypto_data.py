@@ -14,13 +14,39 @@ from starlette.testclient import TestClient
 def _build_crypto_app() -> tuple[FastAPI, MagicMock]:
     from app.deps import set_btc_broker_manager
     from app.routers import btc, crypto_data
-    from broker_crypto.models import Exchange as CryptoExchange
+    from broker_crypto import CryptoExchange
     from tests.integration.route_harness import register_platform_exception_handlers
 
     manager = MagicMock()
-    manager.exchanges = [CryptoExchange.BINANCE]
+    # Router defaults to exchange=weex; only WEEX is registered so that
+    # /exchanges/binance/status reports connected=False.
+    manager.exchanges = [CryptoExchange.WEEX]
 
-    _adapters = {CryptoExchange.BINANCE: MagicMock(get_klines=AsyncMock(return_value=[]))}
+    now = datetime.now(tz=timezone.utc)
+    ticker = MagicMock(
+        exchange=CryptoExchange.WEEX, symbol="BTCUSDT",
+        bid=Decimal("68000"), ask=Decimal("68001"), last=Decimal("68000.5"),
+        volume_24h=Decimal("1000"), timestamp=now,
+    )
+    ticker.model_dump = MagicMock(return_value={
+        "exchange": "WEEX", "symbol": "BTCUSDT",
+        "bid": "68000", "ask": "68001", "last": "68000.5",
+        "volume_24h": "1000", "timestamp": now.isoformat(),
+    })
+    orderbook = MagicMock()
+    orderbook.model_dump = MagicMock(return_value={
+        "exchange": "WEEX", "symbol": "BTCUSDT",
+        "bids": [["68000", "1"]], "asks": [["68001", "1"]],
+        "timestamp": now.isoformat(),
+    })
+    weex_adapter = MagicMock(
+        get_ticker=AsyncMock(return_value=ticker),
+        get_ohlcv=AsyncMock(return_value=[]),
+        get_klines=AsyncMock(return_value=[]),
+        get_orderbook=AsyncMock(return_value=orderbook),
+        get_recent_trades=AsyncMock(return_value=[]),
+    )
+    _adapters = {CryptoExchange.WEEX: weex_adapter}
 
     def _get_adapter(ex):
         if ex not in _adapters:
@@ -28,21 +54,8 @@ def _build_crypto_app() -> tuple[FastAPI, MagicMock]:
         return _adapters[ex]
 
     manager.get_adapter = MagicMock(side_effect=_get_adapter)
-
-    now = datetime.now(tz=timezone.utc)
-    manager.get_ticker = AsyncMock(return_value=MagicMock(
-        exchange=CryptoExchange.BINANCE, symbol="BTCUSDT",
-        bid=Decimal("68000"), ask=Decimal("68001"), last=Decimal("68000.5"),
-        volume_24h=Decimal("1000"), timestamp=now,
-        model_dump=lambda: {"exchange": "BINANCE", "symbol": "BTCUSDT",
-                            "bid": "68000", "ask": "68001", "last": "68000.5",
-                            "volume_24h": "1000", "timestamp": now.isoformat()},
-    ))
-    manager.get_orderbook = AsyncMock(return_value=MagicMock(
-        model_dump=lambda: {"exchange": "BINANCE", "symbol": "BTCUSDT",
-                            "bids": [["68000", "1"]], "asks": [["68001", "1"]],
-                            "timestamp": now.isoformat()},
-    ))
+    manager.get_ticker = AsyncMock(return_value=ticker)
+    manager.get_orderbook = AsyncMock(return_value=orderbook)
     manager.get_recent_trades = AsyncMock(return_value=[])
     manager.get_open_orders = AsyncMock(return_value=[])
     manager.place_order = AsyncMock(side_effect=PermissionError("No auth"))

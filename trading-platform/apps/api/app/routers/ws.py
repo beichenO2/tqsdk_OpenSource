@@ -14,6 +14,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+LIVE_WS_EVENT_TYPES = [
+    "position_update",
+    "trade_fill",
+    "account_update",
+    "strategy_status",
+    "signal_generated",
+    "risk_alert",
+    "order_rejected",
+    "order_cancelled",
+    "order_partially_filled",
+]
+
 
 @dataclass
 class _Client:
@@ -112,7 +124,7 @@ async def ws_live(ws: WebSocket) -> None:
         _connections["live"][ws] = client
     logger.info("Live WS client connected (%d total)", len(_connections["live"]))
 
-    from core.event_bus import EventBus
+    from event_bus import EventBus
     bus = EventBus.get_instance()
 
     async def _event_forwarder(event: dict[str, Any]) -> None:
@@ -120,10 +132,7 @@ async def ws_live(ws: WebSocket) -> None:
         if event_type in client.subscriptions:
             await _safe_send(ws, event)
 
-    event_types = [
-        "position_update", "trade_fill", "account_update",
-        "strategy_status", "signal_generated", "risk_alert",
-    ]
+    event_types = LIVE_WS_EVENT_TYPES
     for et in event_types:
         bus.subscribe(et, _event_forwarder)
 
@@ -177,6 +186,6 @@ async def broadcast(group: str, data: dict[str, Any], channel: str | None = None
 
 async def broadcast_live_event(event_type: str, data: dict[str, Any]) -> None:
     """通过 EventBus 发布事件并推送给所有 live WebSocket 客户端。"""
-    from core.event_bus import EventBus
+    from event_bus import EventBus
     bus = EventBus.get_instance()
     await bus.emit(event_type, data)

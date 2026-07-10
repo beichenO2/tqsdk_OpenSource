@@ -173,37 +173,83 @@ async def start_live_trading(
             accounts.assign_strategy(entry["account_id"], entry["name"])
 
         trading_mode = TradingMode.LIVE if req.mode == "live" else TradingMode.PAPER
+        execution_service = None
+        if req.mode == "live":
+            from app.deps import get_execution_service
+
+            execution_service = get_execution_service()
+
         scheduler = LiveScheduler(
             accounts=accounts,
             strategies=strategies,
             mode=trading_mode,
-            execution_service=None,
+            execution_service=execution_service,
+        )
+
+        default_crypto = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+        default_futures = ["rb2510", "cu2509", "MA2509", "ag2512", "au2512"]
+        on_bar_cb = lambda sym, bar: asyncio.create_task(  # noqa: E731
+            _on_bar_wrapper(scheduler, sym, bar)
         )
 
         feed = None
         task = None
-        if req.market in ("crypto", "both"):
+        if req.market == "both":
+            from sim_live.live_feed import UnifiedLiveFeed
+
+            if req.symbols:
+                futures_symbols = [
+                    s for s in req.symbols if "." in s or (s and s[0].islower())
+                ]
+                crypto_symbols = [s for s in req.symbols if s not in futures_symbols]
+            else:
+                futures_symbols = default_futures
+                crypto_symbols = default_crypto
+            feed = UnifiedLiveFeed(
+                futures_symbols=futures_symbols,
+                crypto_symbols=crypto_symbols,
+                futures_interval=req.interval,
+                crypto_interval=req.interval,
+                on_bar=on_bar_cb,
+            )
+            task = asyncio.create_task(feed.start())
+        elif req.market == "crypto":
             from sim_live.realtime_feed import BinanceKlineFeed
-            default_crypto = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"]
+
             symbols = req.symbols or default_crypto
             feed = BinanceKlineFeed(
                 symbols=symbols,
                 interval=req.interval,
-                on_bar=lambda sym, bar: asyncio.create_task(
-                    _on_bar_wrapper(scheduler, sym, bar)
-                ),
+                on_bar=on_bar_cb,
+            )
+            task = asyncio.create_task(feed.start())
+        elif req.market == "futures":
+            from sim_live.live_feed import TqGatewayLiveFeed
+
+            symbols = req.symbols or default_futures
+            feed = TqGatewayLiveFeed(
+                symbols=symbols,
+                interval=req.interval,
+                on_bar=on_bar_cb,
             )
             task = asyncio.create_task(feed.start())
 
         engine_mode = EngineMode.LIVE if req.mode == "live" else EngineMode.PAPER
         _engine.start(scheduler=scheduler, feed=feed, task=task, mode=engine_mode)
 
+        if req.market == "futures":
+            response_symbols = req.symbols or default_futures
+        elif req.market == "both":
+            response_symbols = req.symbols or (default_crypto + default_futures)
+        else:
+            response_symbols = req.symbols or default_crypto
+
         return {
             "status": "started",
             "mode": req.mode,
             "market": req.market,
             "strategy_count": len(strategies),
-            "symbols": req.symbols or ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT"],
+            "symbols": response_symbols,
             "live_enabled": live_trading_enabled(),
         }
 

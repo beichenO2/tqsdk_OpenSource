@@ -58,6 +58,7 @@ class StrategyConfig(BaseModel):
     name: str
     version: str = "1.0.0"
     symbols: list[str] = Field(default_factory=list)
+    features: list[str] = Field(default_factory=list, description="策略消费的因子名")
     params: dict[str, Any] = Field(default_factory=dict)
     risk_limits: dict[str, float] = Field(default_factory=dict)
     enabled: bool = True

@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Play, RefreshCw, FileText, Activity, CheckCircle, XCircle, Clock, Plus, ArrowUpRight } from 'lucide-react';
+import { Play, RefreshCw, FileText, Activity, CheckCircle, XCircle, Clock, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import Card from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
+import ResearchRunDrawer from '@/components/ResearchRunDrawer';
 import { api } from '@/services/api';
-import { cn } from '@/lib/cn';
+import { parseApiError } from '@/lib/apiError';
+import { useToast } from '@/components/ui/Toast';
 
 interface ResearchRun {
   run_id: string;
@@ -17,27 +19,10 @@ interface ResearchRun {
   status: string;
   metrics: Record<string, number>;
   tags: string[];
-  created_at?: string;
+  notes?: string;
+  created_at?: number | string;
   promotion?: string;
 }
-
-type PipelineStep = {
-  id: string;
-  label: string;
-  description: string;
-  status: string;
-  done: boolean;
-};
-
-type Pipeline = {
-  steps: PipelineStep[];
-  completed: number;
-  total: number;
-  progress: number;
-  pipeline_stage: string;
-  promotion: string;
-  gate_passed: boolean | null;
-};
 
 const statusIcon = (s: string) => {
   switch (s) {
@@ -56,14 +41,13 @@ function statusVariant(s: string): 'success' | 'error' | 'info' | 'neutral' | 'w
 }
 
 export default function ResearchRuns() {
+  const toast = useToast();
   const [runs, setRuns] = useState<ResearchRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedRun, setSelectedRun] = useState<ResearchRun | null>(null);
-  const [pipeline, setPipeline] = useState<Pipeline | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [promoting, setPromoting] = useState(false);
   const [form, setForm] = useState({
     prompt: '',
     strategy_name: '',
@@ -76,54 +60,27 @@ export default function ResearchRuns() {
       setLoading(true);
       const data = await api.getResearchRuns();
       setRuns((data.runs || []) as ResearchRun[]);
-      setError(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load runs');
+      toast.error(parseApiError(e, '加载失败'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => { fetchRuns(); }, [fetchRuns]);
 
-  const loadPipeline = useCallback(async (runId: string) => {
-    try {
-      const p = await api.getResearchPipeline(runId);
-      setPipeline(p);
-    } catch {
-      setPipeline(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedRun?.run_id) {
-      void loadPipeline(selectedRun.run_id);
-    } else {
-      setPipeline(null);
-    }
-  }, [selectedRun?.run_id, loadPipeline]);
+  const openDrawer = (run: ResearchRun) => {
+    setSelectedRun(run);
+    setDrawerOpen(true);
+  };
 
   const handleExecute = async (runId: string) => {
     try {
       await api.executeResearchRun(runId);
+      toast.success('回测已启动');
       await fetchRuns();
-      await loadPipeline(runId);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Execution failed');
-    }
-  };
-
-  const handlePromote = async (runId: string, target: string) => {
-    try {
-      setPromoting(true);
-      const res = await api.promoteResearchRun(runId, target);
-      if (res.warning) setError(res.warning);
-      await fetchRuns();
-      await loadPipeline(runId);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Promote failed');
-    } finally {
-      setPromoting(false);
+      toast.error(parseApiError(e, '执行失败'));
     }
   };
 
@@ -139,19 +96,13 @@ export default function ResearchRuns() {
       });
       setShowCreate(false);
       setForm({ prompt: '', strategy_name: '', symbols: 'rb', timeframe: '5m' });
+      toast.success('Run 已创建');
       await fetchRuns();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Create failed');
+      toast.error(parseApiError(e, '创建失败'));
     } finally {
       setCreating(false);
     }
-  };
-
-  const nextPromote = (promo?: string) => {
-    if (!promo || promo === 'research') return 'backtest';
-    if (promo === 'backtest') return 'paper';
-    if (promo === 'paper') return 'live';
-    return null;
   };
 
   return (
@@ -174,8 +125,6 @@ export default function ResearchRuns() {
           </Button>
         </div>
       </div>
-
-      {error && <p className="text-sm text-loss">{error}</p>}
 
       <Dialog open={showCreate} onClose={() => setShowCreate(false)} title="Create Research Run">
         <div className="space-y-4">
@@ -209,6 +158,13 @@ export default function ResearchRuns() {
         </div>
       </Dialog>
 
+      <ResearchRunDrawer
+        run={selectedRun}
+        open={drawerOpen}
+        onClose={() => { setDrawerOpen(false); setSelectedRun(null); }}
+        onRefresh={fetchRuns}
+      />
+
       {loading ? (
         <div className="grid gap-4">
           {[1, 2, 3].map(i => (
@@ -229,17 +185,15 @@ export default function ResearchRuns() {
             <div
               key={run.run_id}
               className="cursor-pointer"
-              onClick={() => setSelectedRun(selectedRun?.run_id === run.run_id ? null : run)}
+              onClick={() => openDrawer(run)}
             >
-            <Card
-              className="hover:border-blue-300 transition-colors"
-            >
+            <Card className="hover:border-blue-300 transition-colors">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   {statusIcon(run.status)}
                   <div>
                     <div className="font-medium">
-                      {run.strategy_name || 'Unnamed'}
+                      {run.strategy_name || run.notes || 'Unnamed'}
                       <span className="text-gray-400 text-sm ml-2 font-mono">
                         {run.run_id.slice(0, 8)}
                       </span>
@@ -269,59 +223,6 @@ export default function ResearchRuns() {
                   <span>Tags: {run.tags.join(', ')}</span>
                 )}
               </div>
-
-              {selectedRun?.run_id === run.run_id && (
-                <div className="mt-4 pt-4 border-t space-y-4" onClick={(e) => e.stopPropagation()}>
-                  {pipeline && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-text-muted">
-                          Pipeline {pipeline.completed}/{pipeline.total} · {pipeline.promotion}
-                        </span>
-                        {nextPromote(pipeline.promotion) && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={promoting}
-                            onClick={() => handlePromote(run.run_id, nextPromote(pipeline.promotion)!)}
-                          >
-                            <ArrowUpRight className="w-3 h-3 mr-1" />
-                            Promote → {nextPromote(pipeline.promotion)}
-                          </Button>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {pipeline.steps.map((s) => (
-                          <span
-                            key={s.id}
-                            title={s.description}
-                            className={cn(
-                              'rounded-md border px-2 py-1 text-[11px] font-mono',
-                              s.status === 'done' && 'bg-profit/10 border-profit/40 text-profit',
-                              s.status === 'active' && 'bg-brand/10 border-brand text-brand',
-                              s.status === 'pending' && 'border-border text-text-muted',
-                            )}
-                          >
-                            {s.label}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {run.metrics && Object.keys(run.metrics).length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {Object.entries(run.metrics).map(([k, v]) => (
-                        <div key={k} className="bg-gray-50 rounded p-2">
-                          <div className="text-xs text-gray-500">{k}</div>
-                          <div className="font-mono text-sm">
-                            {typeof v === 'number' ? v.toFixed(4) : String(v)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </Card>
             </div>
           ))}

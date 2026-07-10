@@ -1,0 +1,15 @@
+{
+  "worker_id": "paper-futures-01",
+  "market": "futures",
+  "mode": "paper",
+  "checkpoint_interval_s": 60,
+  "interval": "5m",
+  "gateway_url": "http://127.0.0.1:12890",
+  "strategies": [
+    {
+      "name": "observer",
+      "params": {},
+      "symbols": ["rb2510", "cu2509"]
+    }
+  ]
+}

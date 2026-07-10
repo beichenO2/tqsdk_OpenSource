@@ -153,3 +153,56 @@ class ExecutionService:
     def update_prices(self, prices: dict[str, Decimal]) -> None:
         self.risk_engine.update_prices(prices)
         self.execution_engine.update_market_prices(prices)
+
+    async def close_all_positions(self) -> dict:
+        """Emergency flatten — query broker and submit reverse close orders.
+
+        Bypasses order-frequency risk limits; other failures are recorded per symbol.
+        """
+        logger.warning(
+            "EMERGENCY close_all_positions invoked — bypassing order frequency limits"
+        )
+        broker = self.execution_engine._broker  # noqa: SLF001 — emergency direct path
+        positions = await broker.query_positions()
+        open_positions = [p for p in positions if p.volume > 0]
+
+        submitted: list[dict] = []
+        failed: list[dict] = []
+
+        for pos in open_positions:
+            close_direction = (
+                Direction.SHORT if pos.direction == Direction.LONG else Direction.LONG
+            )
+            offset = Offset.CLOSE
+            volume = pos.available if pos.available > 0 else pos.volume
+            price = self.risk_engine._last_prices.get(pos.symbol) or pos.avg_price
+            if price <= 0:
+                price = Decimal("1")
+
+            try:
+                order = await broker.submit_order(
+                    symbol=pos.symbol,
+                    direction=close_direction,
+                    offset=offset,
+                    price=price,
+                    volume=volume,
+                    strategy_id="close-all",
+                )
+                submitted.append(
+                    {
+                        "symbol": pos.symbol,
+                        "direction": close_direction.value,
+                        "offset": offset.value,
+                        "volume": volume,
+                        "order_id": order.order_id,
+                    }
+                )
+            except Exception as e:  # noqa: BLE001 — collect per-symbol failures
+                logger.error("close_all failed for %s: %s", pos.symbol, e)
+                failed.append({"symbol": pos.symbol, "error": str(e)})
+
+        return {
+            "requested": len(open_positions),
+            "submitted": submitted,
+            "failed": failed,
+        }

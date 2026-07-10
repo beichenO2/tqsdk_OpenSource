@@ -26,6 +26,8 @@ export const WORKSPACES: Workspace[] = [
       { to: '/research/strategies', label: '策略', keywords: ['strategy', '策略'] },
       { to: '/research/backtest', label: '回测', keywords: ['backtest', '回测'] },
       { to: '/research/optimizer', label: '优化', keywords: ['optimizer', 'optuna', '冠军'] },
+      { to: '/research/deploy', label: '部署', keywords: ['deploy', '部署', '参数'] },
+      { to: '/research/ml', label: '模型', keywords: ['ml', '模型', '训练', 'xgboost'] },
     ],
   },
   {
@@ -45,6 +47,7 @@ export const WORKSPACES: Workspace[] = [
     pages: [
       { to: '/monitor/risk', label: '风控', keywords: ['risk', '风控'] },
       { to: '/monitor/events', label: '事件流', keywords: ['events', 'websocket'] },
+      { to: '/monitor/explain', label: '证据链', keywords: ['explain', '证据', '审计'] },
       { to: '/monitor/health', label: '系统健康', keywords: ['health', 'gateway'] },
     ],
   },

@@ -162,8 +162,9 @@ def test_strategy_registry_contains_futures_strategies() -> None:
 def test_strategy_registry_btc_after_import() -> None:
     import strategy.btc  # noqa: F401 — triggers auto_register
     registered = StrategyRegistry.list_registered()
-    assert "btc_momentum" in registered
-    assert "btc_grid" in registered
+    # btc_momentum / btc_grid archived in 260505; active crypto strategies:
+    assert "funding_rate_alpha" in registered
+    assert "crypto_portfolio" in registered
 
 
 def test_strategy_registry_create_and_instantiate() -> None:

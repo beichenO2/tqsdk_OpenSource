@@ -34,6 +34,9 @@ const ResearchRuns = lazy(() => import('@/pages/ResearchRuns'));
 const EventsPage = lazy(() => import('@/pages/EventsPage'));
 const HealthPage = lazy(() => import('@/pages/HealthPage'));
 const OptimizerPageReal = lazy(() => import('@/pages/OptimizerPage'));
+const DeployPage = lazy(() => import('@/pages/DeployPage'));
+const MLPage = lazy(() => import('@/pages/MLPage'));
+const ExplainPage = lazy(() => import('@/pages/ExplainPage'));
 
 function PageFallback() {
   return (
@@ -78,6 +81,8 @@ export default function App() {
                 <Route path="research/backtest" element={<Wrap><Backtest /></Wrap>} />
                 <Route path="research/backtest/compare" element={<Wrap><BacktestCompare /></Wrap>} />
                 <Route path="research/optimizer" element={<Wrap><OptimizerPageReal /></Wrap>} />
+                <Route path="research/deploy" element={<Wrap><DeployPage /></Wrap>} />
+                <Route path="research/ml" element={<Wrap><MLPage /></Wrap>} />
 
                 {/* Trading workspace */}
                 <Route path="trading/paper" element={<Wrap><PaperTrading /></Wrap>} />
@@ -87,6 +92,7 @@ export default function App() {
                 {/* Monitor workspace */}
                 <Route path="monitor/risk" element={<Wrap><Risk /></Wrap>} />
                 <Route path="monitor/events" element={<Wrap><EventsPage /></Wrap>} />
+                <Route path="monitor/explain" element={<Wrap><ExplainPage /></Wrap>} />
                 <Route path="monitor/health" element={<Wrap><HealthPage /></Wrap>} />
 
                 {/* Platform workspace */}

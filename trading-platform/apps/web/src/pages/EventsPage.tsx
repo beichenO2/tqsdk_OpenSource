@@ -10,7 +10,7 @@ const CHANNELS = [
   'trade_fill',
   'account_update',
   'strategy_status',
-  'signal',
+  'signal_generated',
   'risk_alert',
 ] as const;
 
@@ -18,7 +18,7 @@ function badgeVariant(type: string) {
   if (type === 'trade_fill') return 'success' as const;
   if (type === 'risk_alert') return 'error' as const;
   if (type === 'position_update') return 'warning' as const;
-  if (type === 'signal') return 'info' as const;
+  if (type === 'signal_generated') return 'info' as const;
   return 'neutral' as const;
 }
 

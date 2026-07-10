@@ -22,7 +22,6 @@ dependencies = [
     "gymnasium>=1.0",
     "torch>=2.5",
     "xgboost>=2.1",
-    "lightgbm>=4.5",
     "stable-baselines3>=2.4",
     "optuna>=4.1",
     "ray>=2.40",
@@ -44,6 +43,9 @@ dev = [
     "mypy>=1.13",
     "pre-commit>=4.0",
     "httpx>=0.28",
+]
+ml = [
+    "lightgbm>=4.5",
 ]
 
 [build-system]

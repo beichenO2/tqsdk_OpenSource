@@ -3,6 +3,7 @@
 from .adaptive_trend import AdaptiveTrendStrategy
 from .channel_breakout import ChannelBreakoutStrategy
 from .ema_derivative import EMADerivativeStrategy
+from .factor_strategy import FactorStrategy
 from .kalman_trend import KalmanTrendStrategy
 from .momentum_rotation import MomentumRotationStrategy
 from .multi_indicator import MultiIndicatorStrategy
@@ -17,6 +18,7 @@ __all__ = [
     "AdaptiveTrendStrategy",
     "ChannelBreakoutStrategy",
     "EMADerivativeStrategy",
+    "FactorStrategy",
     "KalmanTrendStrategy",
     "MomentumRotationStrategy",
     "MultiIndicatorStrategy",

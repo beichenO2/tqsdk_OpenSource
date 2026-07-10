@@ -111,3 +111,20 @@ class TqGatewayBrokerClient:
         resp = await self._client.get("/api/v1/account")
         resp.raise_for_status()
         return resp.json()
+
+    async def query_order(self, order_id: str) -> Optional[dict[str, Any]]:
+        resp = await self._client.get(f"/api/v1/orders/{order_id}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        return resp.json()
+
+    async def list_orders(self) -> list[dict[str, Any]]:
+        resp = await self._client.get("/api/v1/orders")
+        resp.raise_for_status()
+        return resp.json().get("items", [])
+
+    async def list_trades(self) -> list[dict[str, Any]]:
+        resp = await self._client.get("/api/v1/trades")
+        resp.raise_for_status()
+        return resp.json().get("items", [])

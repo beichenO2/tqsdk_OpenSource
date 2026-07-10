@@ -1,0 +1,6 @@
+# Optional ML training dependencies — NOT for trading/API/gateway processes.
+# LightGBM loads a second OpenMP runtime that conflicts with pip-installed torch
+# in the same process (SIGSEGV). Install only in isolated ML worker environments.
+# Usage: pip install -r requirements-ml.txt
+#        pip install -e ".[ml]"
+lightgbm>=4.5
