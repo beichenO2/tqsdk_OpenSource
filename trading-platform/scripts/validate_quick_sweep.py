@@ -126,8 +126,6 @@ def main() -> None:
     args = parser.parse_args()
 
     import strategy.futures
-    import importlib
-    importlib.import_module("strategy.futures.whale_detector")
 
     registered = StrategyRegistry.list_registered()
     logger.info("Registered strategies: %d", len(registered))

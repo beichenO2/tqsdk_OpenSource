@@ -14,21 +14,16 @@
 
 本文档建立了明确的文件层级规范：**`*_latest.json` = 权威最新，其他 = 历史快照或中间产物**。
 
+> **2026-07-11 清理：** gate 全 reject / 回测全负的策略与产物已移除，见 git 历史。
+
 ---
 
 ## 一、`results/` 目录（主要查询入口）
 
 | 文件 | 类型 | 由哪个脚本写入 | 说明 |
 |------|------|--------------|------|
-| `whale_detector_latest.json` | ★ **latest 指针** | `scripts/run_whale_detector.py` | 每次运行后自动覆写。包含 `_meta.generated_at` 时间戳。**查询 whale 回测最新结果读此文件。** |
-| `whale_detector_optuna_latest.json` | ★ **latest 指针** | `scripts/optuna_whale_tune.py` | 每次 Optuna 优化后自动覆写。包含最优参数 + 验证结果。**查询 whale 最新超参读此文件。** |
-| `whale_detector_report.json` | 历史快照 | `run_whale_detector.py` | IsolationForest 训练 + 回测报告（默认输出）。latest 的前一版本。 |
-| `whale_detector_optuna.json` | 历史快照 | 早期手工 Optuna 跑 | 100 trials，小数据集，无 elapsed_sec 字段。**已过时，勿作为最新依据。** |
-| `whale_detector_optuna_big.json` | 历史快照 | `optuna_whale_tune.py` | 大数据 Optuna（10000 bars × 3 品种），有 elapsed_sec。latest 的前一版本。 |
-| `whale_detector_fulldata.json` | 历史快照 | 手工脚本 | 6 品种 × 30000 bars 全量回测（默认参数）。注意与 optuna latest 的验证数据不同。 |
 | `futures_backtest_report.json/csv` | 定期快照 | `run_futures_backtest.py` | 多策略期货回测汇总。 |
 | `futures_backtest_test.json/csv` | 测试快照 | 同上（测试集） | 小规模验证用。 |
-| `new_strategies_backtest.json/csv` | 定期快照 | 各策略脚本 | 所有新策略聚合回测报告。 |
 | `backtest_log.txt` | 运行日志 | 各脚本 stderr | ~1.2 GB 大文件，仅在排查问题时查阅。 |
 
 ---
@@ -75,8 +70,6 @@
 ## 五、查询路由速查
 
 ```
-我想知道 whale 策略最新超参      → results/whale_detector_optuna_latest.json
-我想知道 whale 策略最新回测表现   → results/whale_detector_latest.json
 我想知道 eternal optimizer 最新状态 → eternal-optimizer/STATUS.json
 我想知道某个 eternal 轮次详情     → eternal-optimizer/STATUS.json 查 latest_round，再读对应 results*/round_*.json
 我想知道加密策略最新 OOS 结果     → .planning/STATE.md（人工维护的里程碑表）

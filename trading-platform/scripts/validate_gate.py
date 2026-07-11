@@ -3,8 +3,8 @@
 
 用法:
   cd ~/Polarisor/tqsdk-gnhf-worktrees/pos2/trading-platform
-  python scripts/validate_gate.py --strategy whale_detector --symbols rb SA MA
-  python scripts/validate_gate.py --strategy whale_detector --full-gate
+  python scripts/validate_gate.py --strategy attack_defense --symbols rb SA MA
+  python scripts/validate_gate.py --strategy attack_defense --full-gate
 
 Gate 阈值 (contracts.md §4):
   oos.sharpe >= 0.8  且 oos.return > 0

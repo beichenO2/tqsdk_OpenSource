@@ -9,9 +9,6 @@ from . import news_sentiment as _news_sentiment  # noqa: F401 — @auto_register
 from . import orderflow_imbalance as _orderflow_imbalance  # noqa: F401 — @auto_register
 from . import cross_momentum as _cross_momentum  # noqa: F401 — @auto_register
 from . import intraday_reversal as _intraday_reversal  # noqa: F401 — @auto_register
-from . import intraday_reversal_v2_a as _intraday_reversal_v2_a  # noqa: F401 — @auto_register (hybrid A)
-from . import intraday_reversal_v2_b as _intraday_reversal_v2_b  # noqa: F401 — @auto_register (hybrid B)
-from . import intraday_reversal_v2_c as _intraday_reversal_v2_c  # noqa: F401 — @auto_register (hybrid C)
 from . import kalman_trend as _kalman_trend  # noqa: F401 — @auto_register
 from . import har_volatility as _har_volatility  # noqa: F401 — @auto_register
 from . import ensemble_futures as _ensemble_futures  # noqa: F401 — @auto_register
@@ -39,9 +36,6 @@ from . import ichimoku_futures as _ichimoku_futures  # noqa: F401 — @auto_regi
 from . import parabolic_sar as _parabolic_sar  # noqa: F401 — @auto_register
 from . import adx_trend_strength as _adx_trend_strength  # noqa: F401 — @auto_register
 from . import opening_rush as _opening_rush  # noqa: F401 — @auto_register
-from . import mamba_trend as _mamba_trend  # noqa: F401 — @auto_register
-from . import regime_ensemble as _regime_ensemble  # noqa: F401 — @auto_register
-from . import cross_asset_momentum as _cross_asset_momentum  # noqa: F401 — @auto_register
 from . import attack_defense as _attack_defense  # noqa: F401 — @auto_register
 from .adaptive_bollinger import AdaptiveBollingerStrategy
 from .bollinger_mr import BollingerMRStrategy

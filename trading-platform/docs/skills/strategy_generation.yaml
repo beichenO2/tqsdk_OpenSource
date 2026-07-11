@@ -16,7 +16,7 @@ interface:
     - name: strategy_template
       type: string
       default: "base"
-      options: ["base", "attack_defense", "whale_detector", "ml_signal"]
+      options: ["base", "attack_defense", "ml_signal"]
 
   output:
     - name: strategy_code
