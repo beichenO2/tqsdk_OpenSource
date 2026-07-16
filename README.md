@@ -29,14 +29,25 @@ tqsdk 是 Polarisor 生态中的 **量化策略研究沙箱**，提供从数据�
 - **Frontend**: React 18 + Recharts + Vite
 - **Database**: SQLite (WAL mode)
 
-## 快速启动
+## 运行时治理
+
+持久服务统一由 PolarPort（端口）和 PolarProcess（生命周期）管理。注册契约本身不启动服务：
+
+```bash
+bash scripts/register-runtime.sh
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-data-collector
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-gateway
+```
+
+禁止直接运行 Python/Uvicorn/Vite 服务、后台任务、PID 文件、直接信号或 launchd。生命周期动作必须命中精确 service ID。
+
+## 服务操作
 
 ### TqSdk 网关（凭证隔离）
 
 ```bash
-# 1. 确保 PolarPrivate 已启动且 Vault 已解锁
-# 2. 白名单仅允许 gateway 二进制 D-class grant（~/.privportal/d-class-allowlist.json）
-bash tqsdk-gateway/Start/start.sh start
+# 仅在明确需要期货交易/行情时启动；平时保持 stopped
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-gateway/start
 # → http://127.0.0.1:12890/health
 
 # 验证（本进程不接触期货密码）
@@ -48,29 +59,17 @@ trading-platform / data-collector 通过 `TQSDK_GATEWAY_URL` 访问网关，**�
 ### 数据采集服务
 
 ```bash
-cd data-collector
-pip install -r requirements.txt
-python main.py
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-data-collector/restart
+curl -fsS http://127.0.0.1:18900/health
 ```
 
 ### 交易平台 API
 
-```bash
-cd trading-platform/apps/api
-# install domain packages (editable)
-for pkg in packages/*/; do pip install -e "$pkg"; done
-python app/main.py
-```
-
-API 默认运行在 `http://localhost:8000`。
+交易平台 API 尚未作为本轮在线服务注册。需要持久运行前，必须先在 `polaris.json` 声明 health、preferred port、前台 launcher，并注册到 PolarProcess；不得直接启动。
 
 ### 前端
 
-```bash
-cd trading-platform/apps/web
-npm install
-npm run dev
-```
+前端开发服务器同样必须先以独立 service ID 完成 PolarPort/PolarProcess onboarding；安装与 build 可以作为一次性命令直接运行。
 
 ### 冒烟测试
 
@@ -81,11 +80,7 @@ python scripts/run_smoke.py
 
 ### 永续优化器
 
-```bash
-cd trading-platform/eternal-optimizer
-./run.sh          # 运行 1h K 线优化器
-./run-futures.sh  # 运行期货优化器
-```
+优化器属于持久 worker，运行前必须以独立 service ID 注册到 PolarProcess；不得从 shell 留下后台进程。
 
 ## 项目结构
 

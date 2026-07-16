@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 _status: dict = {"status": "starting", "credentials": False, "collecting": False}
 _lock = threading.Lock()
 
-HEALTH_PORT = 18900
+
+def resolve_health_port() -> int:
+    raw = os.getenv("TQSDK_COLLECTOR_PORT", os.getenv("PORT", "18900"))
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"TQSDK_COLLECTOR_PORT must be an integer, got {raw!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"TQSDK_COLLECTOR_PORT must be between 1 and 65535, got {port}")
+    return port
 
 
 def update_status(**kwargs: object) -> None:
@@ -39,7 +49,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def start_health_server() -> HTTPServer:
     """Start the health HTTP server in a daemon thread."""
-    server = HTTPServer(("0.0.0.0", HEALTH_PORT), _Handler)
+    server = HTTPServer(("0.0.0.0", resolve_health_port()), _Handler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     return server

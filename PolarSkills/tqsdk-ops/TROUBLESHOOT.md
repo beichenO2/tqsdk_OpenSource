@@ -1,46 +1,32 @@
-# tqsdk — 故障排查
+# tqsdk troubleshooting
 
-> 国内期货 + BTC 双市场量化交易平台
-
-## 健康检查
+## Read-only diagnosis
 
 ```bash
-# 进程存活
-pgrep -f "tqsdk" || echo "NOT RUNNING"
-
-# HTTP 端点
-curl -s http://127.0.0.1:18900/health
+curl -fsS http://127.0.0.1:11050/api/health
+curl -fsS http://127.0.0.1:11055/api/health
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-data-collector
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-gateway
+curl -sS http://127.0.0.1:18900/health
+curl -sS http://127.0.0.1:12890/health
 ```
 
-## 关键端口
+Use PolarProcess's verified PID and PolarPort's service/project owner as the facts. Do not infer ownership from broad process-name matches.
 
-| 端口 | 说明 |
-|---|---|
-| 18900 | tqsdk 主服务 |
+## Collector waits for gateway
 
-## 常见故障
+This is expected when `tqsdk-gateway` is intentionally stopped. The collector exposes health first, retries the gateway, reports the dependency failure, exits, and is recovered by PolarProcess according to its restart policy. Do not bypass the gateway and do not move credentials into the collector.
 
-### 1. 行情断连
+## Exact recovery
 
-**修复**：`检查 TqSdk 连接状态和网络`
-
-### 2. WEEX 签名失败
-
-**修复**：`确认 PolarPrivate 已解锁，且 Vault 中 exchange.weex 绑定已配置`
-
-### 3. 回测数据缺失
-
-**修复**：`确认数据目录和日期范围`
-
-## 依赖服务
-
-- 天勤 TqSdk gateway（期货行情/下单）
-- PolarPrivate B-class sign（WEEX 加密实盘）
-
-## 紧急恢复
+After confirming both authorities are healthy, restart only the affected service:
 
 ```bash
-cd ~/Polarisor/tqsdk
-cd data-collector && python collector.py
-curl -s http://127.0.0.1:18900/health && echo 'OK' || echo 'BROKEN'
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-data-collector/restart
 ```
+
+If a trading operation explicitly requires the gateway, start only that service ID and then verify `connected` from its health response.
+
+## Forbidden recovery shortcuts
+
+Do not use background shell jobs, PID files, direct signals, launchd, raw Python/Uvicorn commands, or another process manager. Do not free a port owned by another service.

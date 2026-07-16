@@ -1,31 +1,40 @@
-# tqsdk — 使用指南
+---
+name: tqsdk-ops
+description: Use when inspecting, deploying, recovering, or changing the tqsdk data collector or TqSdk credential gateway, or when a tqsdk task may bind a stable port or leave a persistent process.
+---
 
-> 国内期货 + BTC 双市场量化交易平台
+# tqsdk Operations
 
-## 核心信息
+## Runtime contract
 
-| 维度 | 值 |
-|---|---|
-| 健康端点 | 端口 18900（/health） |
-| 启动命令 | `cd data-collector && python collector.py` |
-| 安装命令 | `cd data-collector && pip install -r requirements.txt` |
-| 技术栈 | Python, TqSdk gateway (期货), WEEX via PolarPrivate (加密实盘) |
+PolarPort is the only port authority and PolarProcess is the only lifecycle authority. The governed services are:
 
-## 快速启动
+| Service ID | Preferred port | Auto-start | Health |
+|---|---:|---:|---|
+| `tqsdk-data-collector` | 18900 | true | `http://127.0.0.1:18900/health` |
+| `tqsdk-gateway` | 12890 | false | `http://127.0.0.1:12890/health` |
+
+The gateway owns plaintext TqSdk credentials. Keep it stopped unless an explicit trading operation requires it. Never obtain D-class secrets in the collector or trading platform.
+
+## Required workflow
+
+1. Read the `polar-runtime-governance` skill and run its read-only audit.
+2. Inspect `http://127.0.0.1:11055/api/services` and `http://127.0.0.1:11050/api/list`.
+3. Use only the exact PolarProcess action for the intended service.
+4. Verify the service record, one PolarPort owner, one listener, and the declared health endpoint.
 
 ```bash
-cd ~/Polarisor/tqsdk
-cd data-collector && pip install -r requirements.txt
-cd data-collector && python collector.py
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-data-collector
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-data-collector/restart
+curl -fsS http://127.0.0.1:18900/health
 ```
 
-## 健康检查
+## Prohibited
 
-```bash
-curl -s http://127.0.0.1:18900/health
-```
+- Do not invoke the foreground launchers manually.
+- Do not use raw Python/Uvicorn commands for persistent services.
+- Do not use `nohup`, background shell jobs, PID files, `pgrep`, direct signals, or launchd.
+- Do not start the gateway as a side effect of collector diagnosis.
+- Do not repair another service's port or process record.
 
-## 依赖服务
-
-- 天勤 TqSdk gateway（期货行情/下单）
-- PolarPrivate B-class sign（WEEX 加密实盘）
+See `DEPLOY.md` for registration and `TROUBLESHOOT.md` for read-only diagnosis.

@@ -1033,6 +1033,45 @@
           ]
         }
       ]
+    },
+    {
+      "id": "R12",
+      "need": "运行时端口与进程统一治理",
+      "approach": "将在线 data collector 与凭证隔离 gateway 收敛为两个前台服务；端口仅由 PolarPort 分配，生命周期仅由 PolarProcess 管理。collector 保持自动恢复，当前离线 gateway 只注册为 stopped policy，不在迁移中擅自启动或读取凭证。",
+      "features": [
+        {
+          "name": "runtime_governance",
+          "status": "done",
+          "tech": [
+            "PolarPort",
+            "PolarProcess",
+            "Bash",
+            "Python",
+            "FastAPI"
+          ],
+          "behavior": [
+            "tqsdk-data-collector 仅由 PolarProcess 管理并通过 PolarPort 申请 preferred port 18900",
+            "tqsdk-gateway 仅由 PolarProcess 管理并通过 PolarPort 申请 preferred port 12890",
+            "两个 launcher 均以前台 exec 运行，不使用 nohup、后台符号、PID 文件或直接信号",
+            "旧 tqsdk-collector reservation 精确迁移为 canonical tqsdk-data-collector identity",
+            "gateway 保持 auto_start=false；迁移过程不启动 gateway、不请求 D-class 凭证"
+          ],
+          "test_status": "passed",
+          "evidence": [
+            "2026-07-16: baseline project audit drift=1 (legacy Start scripts use background/PID/kill); PolarPort and PolarProcess healthy",
+            "2026-07-16: baseline collector suite 5/5 passed; gateway session tests 3/3 passed while 4 order endpoint tests have a pre-existing Starlette/httpx TestClient incompatibility",
+            "2026-07-16: live collector was PolarProcess-managed on PID 94515 with restart-on-failure; gateway 12890 was offline and collector truthfully reported initializing while waiting for it",
+            "2026-07-16: TDD RED failed on missing dual-authority foreground launchers and hard-coded collector health port",
+            "2026-07-16: GREEN passed runtime contract, four shell syntax checks, collector 7/7, gateway lock tests 3/3, JSON validation and project governance audit compliant",
+            "2026-07-16: full gateway suite remained at the baseline 4 TestClient compatibility failures and 3 passes; no gateway application behavior changed",
+            "2026-07-16: cutover exposed PolarProcess spawn/status ordering: service records become running before the foreground launcher executes; TDD regression now accepts only the managed starting/running window and still rejects stopped/error",
+            "2026-07-16: final exact collector restart converged to PID 52760 with PPID PolarProcess, pid_verified=true, one 18900 listener and one active PolarPort owner tqsdk-data-collector/tqsdk:18900",
+            "2026-07-16: collector health truthfully returned initializing/credentials=false/collecting=false while tqsdk-gateway remained stopped, auto_start=false, pid=null and 12890 had no listener",
+            "2026-07-16: final project audit compliant; ecosystem drift reduced from 13 to 11; reference/Vibe-Trading remained untouched"
+          ]
+        }
+      ],
+      "blockers": []
     }
   ],
   "tech": {
@@ -1074,13 +1113,38 @@
   },
   "service_management": {
     "install_command": "cd data-collector && pip install -r requirements.txt",
-    "start_command": "cd data-collector && python collector.py",
-    "restart_command": "cd data-collector && python collector.py",
-    "health_endpoint": "http://127.0.0.1:18900/health"
+    "service_id": "tqsdk-data-collector",
+    "start_command": "bash Start/start.sh",
+    "restart_command": "bash Start/start.sh",
+    "health_endpoint": "http://127.0.0.1:18900/health",
+    "preferred_port": 18900,
+    "auto_start": true,
+    "process_mode": "foreground_command",
+    "services": [
+      {
+        "service_id": "tqsdk-data-collector",
+        "name": "TqSdk Data Collector",
+        "start_command": "bash Start/start.sh",
+        "health_endpoint": "http://127.0.0.1:18900/health",
+        "preferred_port": 18900,
+        "auto_start": true,
+        "process_mode": "foreground_command"
+      },
+      {
+        "service_id": "tqsdk-gateway",
+        "name": "TqSdk Credential Gateway",
+        "start_command": "bash tqsdk-gateway/Start/start.sh",
+        "health_endpoint": "http://127.0.0.1:12890/health",
+        "preferred_port": 12890,
+        "auto_start": false,
+        "process_mode": "foreground_command"
+      }
+    ],
+    "notes": "Persistent lifecycle actions must use the exact PolarProcess service ID. Gateway stays stopped unless an explicit trading operation requires it."
   },
   "contacts": {
-    "last_updated": "2026-07-09",
-    "updated_by": "solo-web-hw-1e7b2a8c",
-    "batch": "2026-07-09-web-v2-ia"
+    "last_updated": "2026-07-16",
+    "updated_by": "codex",
+    "batch": "2026-07-16-runtime-governance"
   }
 }

@@ -1,44 +1,50 @@
-# tqsdk — 部署指南
+# tqsdk deployment
 
-> 国内期货 + BTC 双市场量化交易平台
+## Install transient dependencies
 
-## 环境要求
+```bash
+cd ~/Polarisor/tqsdk/data-collector
+pip install -r requirements.txt
+cd ../tqsdk-gateway
+pip install -r requirements.txt
+```
 
-- 技术栈：Python, TqSdk gateway (期货), WEEX via PolarPrivate (加密实盘)
-- 安装：`cd data-collector && pip install -r requirements.txt`
+Dependency installation is transient and must not leave a listener.
 
-## 安装步骤
+## Register runtime contracts
 
 ```bash
 cd ~/Polarisor/tqsdk
-cd data-collector && pip install -r requirements.txt
+bash scripts/register-runtime.sh
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-data-collector
+curl -fsS http://127.0.0.1:11055/api/services/tqsdk-gateway
 ```
 
-## 启动方式
+Registration reserves `tqsdk-data-collector/tqsdk:18900` and `tqsdk-gateway/tqsdk:12890`. It does not call a lifecycle endpoint. The gateway remains `auto_start=false`.
+
+## Lifecycle actions
+
+Only PolarProcess may act on a persistent service:
 
 ```bash
-cd ~/Polarisor/tqsdk
-cd data-collector && python collector.py
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-data-collector/restart
 ```
 
-## 端口分配
-
-| 端口 | 用途 |
-|---|---|
-| 18900 | 主服务 |
-
-## 健康检查确认
+Starting the credential gateway requires an explicit trading need:
 
 ```bash
-curl -s http://127.0.0.1:18900/health
+curl -fsS -X POST http://127.0.0.1:11055/api/services/tqsdk-gateway/start
 ```
 
-## 回滚方式
+Never start the gateway merely to make collector health look green.
+
+## Verify
 
 ```bash
-cd ~/Polarisor/tqsdk
-git log --oneline -5
-git checkout <previous-commit>
-cd data-collector && pip install -r requirements.txt
-cd data-collector && python collector.py
+curl -fsS http://127.0.0.1:11050/api/list
+curl -fsS http://127.0.0.1:11055/api/services
+curl -fsS http://127.0.0.1:18900/health
+curl -fsS http://127.0.0.1:12890/health
 ```
+
+Collector health may truthfully report `initializing` or `error` while the gateway is intentionally stopped.
