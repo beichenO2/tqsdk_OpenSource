@@ -5,9 +5,9 @@ description: Use when inspecting, deploying, recovering, or changing the tqsdk d
 
 # tqsdk Operations
 
-## Runtime contract
+## Runtime contract (PolarManager)
 
-PolarPort is the only port authority and PolarProcess is the only lifecycle authority. The governed services are:
+**PolarManager** = PolarPort (`:11050`) + PolarProcess (`:11055`) + PolarBudget (`:11060`). Port/lifecycle for tqsdk services go through Port/Process; heavy collector backfills should consult Budget. The governed services are:
 
 | Service ID | Preferred port | Auto-start | Health |
 |---|---:|---:|---|
